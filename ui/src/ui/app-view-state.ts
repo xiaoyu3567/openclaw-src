@@ -204,6 +204,11 @@ export type AppViewState = {
   usageProviderCards: Record<string, UsageProviderCardState>;
   usageProviderAdding: boolean;
   usageProviderAutoRefresh: boolean;
+  usageProviderConfigsLoading: boolean;
+  usageProviderConfigsError: string | null;
+  usageProviderConfigsLoadedAt: number | null;
+  usageProviderConfigsVersion: number;
+  usageProviderLegacyMigrated: boolean;
   usageProviderForm: {
     name: string;
     type: "sub2api";

@@ -11,6 +11,12 @@ export type UsageProviderConfig = {
   timeoutMs: number;
 };
 
+export type UsageProviderConfigSnapshot = {
+  items: UsageProviderConfig[];
+  version: number;
+  updatedAtMs: number;
+};
+
 export type UsageProviderResponse = {
   isValid?: boolean;
   planName?: string;
@@ -44,7 +50,19 @@ export type UsageProviderCardState = {
   data: UsageProviderResponse | null;
 };
 
-const STORAGE_KEY = "openclaw.control.usage.providers.v1";
+const LEGACY_STORAGE_KEY = "openclaw.control.usage.providers.v1";
+
+function toTrimmedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function toPositiveNumber(value: unknown, fallback: number, floor: number): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) {
+    return fallback;
+  }
+  return Math.max(floor, Math.floor(n));
+}
 
 export function maskApiKey(apiKey: string): string {
   const trimmed = apiKey.trim();
@@ -58,41 +76,59 @@ export function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.trim().replace(/\/$/, "");
 }
 
+export function sanitizeUsageProviderConfig(
+  entry: unknown,
+  opts?: { allowMissingId?: boolean },
+): UsageProviderConfig | null {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+  const parsed = entry as Record<string, unknown>;
+  const idRaw = toTrimmedString(parsed.id);
+  const id =
+    idRaw || (opts?.allowMissingId ? `provider-${Math.random().toString(36).slice(2)}` : "");
+  const name = toTrimmedString(parsed.name);
+  const baseUrl = normalizeBaseUrl(toTrimmedString(parsed.baseUrl));
+  const apiKey = toTrimmedString(parsed.apiKey);
+  const enabled = typeof parsed.enabled === "boolean" ? parsed.enabled : true;
+  const intervalSec = toPositiveNumber(parsed.intervalSec, 60, 10);
+  const timeoutMs = toPositiveNumber(parsed.timeoutMs, 12000, 2000);
+
+  if (!id || !name || !baseUrl || !apiKey) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    type: "sub2api",
+    baseUrl,
+    apiKey,
+    enabled,
+    intervalSec,
+    timeoutMs,
+  };
+}
+
+export function sanitizeUsageProviderConfigs(raw: unknown): UsageProviderConfig[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw
+    .map((entry) => sanitizeUsageProviderConfig(entry, { allowMissingId: true }))
+    .filter((entry): entry is UsageProviderConfig => Boolean(entry));
+}
+
 export function loadUsageProviderConfigs(): UsageProviderConfig[] {
   if (typeof window === "undefined") {
     return [];
   }
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) {
       return [];
     }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return parsed
-      .filter((entry): entry is UsageProviderConfig => Boolean(entry && typeof entry === "object"))
-      .map((entry) => ({
-        id:
-          typeof entry.id === "string"
-            ? entry.id
-            : `provider-${Math.random().toString(36).slice(2)}`,
-        name: typeof entry.name === "string" ? entry.name : "",
-        type: entry.type === "sub2api" ? "sub2api" : "sub2api",
-        baseUrl: typeof entry.baseUrl === "string" ? normalizeBaseUrl(entry.baseUrl) : "",
-        apiKey: typeof entry.apiKey === "string" ? entry.apiKey : "",
-        enabled: entry.enabled,
-        intervalSec:
-          typeof entry.intervalSec === "number" && Number.isFinite(entry.intervalSec)
-            ? Math.max(10, Math.floor(entry.intervalSec))
-            : 60,
-        timeoutMs:
-          typeof entry.timeoutMs === "number" && Number.isFinite(entry.timeoutMs)
-            ? Math.max(2000, Math.floor(entry.timeoutMs))
-            : 12000,
-      }))
-      .filter((entry) => Boolean(entry.name && entry.baseUrl && entry.apiKey));
+    return sanitizeUsageProviderConfigs(JSON.parse(raw));
   } catch {
     return [];
   }
@@ -102,7 +138,14 @@ export function saveUsageProviderConfigs(configs: UsageProviderConfig[]) {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(configs));
+  window.localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(configs));
+}
+
+export function clearUsageProviderConfigs() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.removeItem(LEGACY_STORAGE_KEY);
 }
 
 export async function fetchSub2ApiUsage(

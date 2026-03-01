@@ -4,10 +4,14 @@ import type { AppViewState } from "./app-view-state.ts";
 import type { UsageState } from "./controllers/usage.ts";
 import { loadUsage, loadSessionTimeSeries, loadSessionLogs } from "./controllers/usage.ts";
 import {
+  clearUsageProviderConfigs,
+  loadUsageProviderConfigs,
   normalizeBaseUrl,
-  saveUsageProviderConfigs,
+  sanitizeUsageProviderConfig,
+  sanitizeUsageProviderConfigs,
   type UsageProviderCardState,
   type UsageProviderConfig,
+  type UsageProviderConfigSnapshot,
 } from "./provider-usage.ts";
 import { generateUUID } from "./uuid.ts";
 import { renderProviderUsagePanel } from "./views/provider-usage.ts";
@@ -46,9 +50,62 @@ const ensureProviderCard = (
   return next;
 };
 
-const saveProviderConfigs = (state: AppViewState, configs: UsageProviderConfig[]) => {
-  state.usageProviderConfigs = configs;
-  saveUsageProviderConfigs(configs);
+const PROVIDER_CONFIG_SYNC_INTERVAL_MS = 30_000;
+let providerConfigSyncTimer: number | null = null;
+let providerConfigFocusListener: (() => void) | null = null;
+let providerConfigSyncHost: AppViewState | null = null;
+
+const toErrorMessage = (err: unknown): string => {
+  if (typeof err === "string") {
+    return err;
+  }
+  if (err instanceof Error && err.message.trim()) {
+    return err.message;
+  }
+  return "request failed";
+};
+
+const parseProviderConfigSnapshot = (payload: unknown): UsageProviderConfigSnapshot => {
+  if (!payload || typeof payload !== "object") {
+    return { items: [], version: 0, updatedAtMs: 0 };
+  }
+  const parsed = payload as Record<string, unknown>;
+  const versionRaw =
+    typeof parsed.version === "number" ? parsed.version : Number(parsed.version ?? 0);
+  const updatedAtRaw =
+    typeof parsed.updatedAtMs === "number" ? parsed.updatedAtMs : Number(parsed.updatedAtMs ?? 0);
+  return {
+    items: sanitizeUsageProviderConfigs(parsed.items),
+    version: Number.isFinite(versionRaw) ? Math.max(0, Math.floor(versionRaw)) : 0,
+    updatedAtMs: Number.isFinite(updatedAtRaw) ? Math.max(0, Math.floor(updatedAtRaw)) : 0,
+  };
+};
+
+const pruneProviderCards = (state: AppViewState) => {
+  const allowed = new Set(state.usageProviderConfigs.map((entry) => entry.id));
+  const next: Record<string, UsageProviderCardState> = {};
+  for (const [id, card] of Object.entries(state.usageProviderCards)) {
+    if (allowed.has(id)) {
+      next[id] = card;
+    }
+  }
+  state.usageProviderCards = next;
+};
+
+const applyProviderConfigSnapshot = (
+  state: AppViewState,
+  snapshot: UsageProviderConfigSnapshot,
+) => {
+  const previousIds = new Set(state.usageProviderConfigs.map((entry) => entry.id));
+  state.usageProviderConfigs = snapshot.items;
+  state.usageProviderConfigsVersion = snapshot.version;
+  state.usageProviderConfigsLoadedAt = Date.now();
+  pruneProviderCards(state);
+  scheduleProviderAutoRefresh(state);
+  const added = snapshot.items.map((entry) => entry.id).filter((id) => !previousIds.has(id));
+  for (const id of added) {
+    void refreshProvider(state, id);
+  }
 };
 
 const refreshProvider = async (state: AppViewState, id: string) => {
@@ -134,7 +191,148 @@ const refreshAllProviders = async (state: AppViewState) => {
   );
 };
 
+const loadProviderConfigsFromGateway = async (
+  state: AppViewState,
+  opts?: { force?: boolean; skipLegacyMigration?: boolean },
+) => {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  if (state.usageProviderConfigsLoading) {
+    return;
+  }
+  if (!opts?.force && state.usageProviderConfigsLoadedAt) {
+    const elapsed = Date.now() - state.usageProviderConfigsLoadedAt;
+    if (elapsed < 5_000) {
+      return;
+    }
+  }
+
+  state.usageProviderConfigsLoading = true;
+  state.usageProviderConfigsError = null;
+
+  try {
+    let snapshot = parseProviderConfigSnapshot(
+      await state.client.request("usage.provider.config.list", {}),
+    );
+
+    if (
+      !opts?.skipLegacyMigration &&
+      !state.usageProviderLegacyMigrated &&
+      snapshot.items.length === 0
+    ) {
+      const legacyItems = loadUsageProviderConfigs();
+      if (legacyItems.length > 0) {
+        for (const item of legacyItems) {
+          await state.client.request("usage.provider.config.upsert", { item });
+        }
+        clearUsageProviderConfigs();
+        snapshot = parseProviderConfigSnapshot(
+          await state.client.request("usage.provider.config.list", {}),
+        );
+      }
+      state.usageProviderLegacyMigrated = true;
+    } else if (!state.usageProviderLegacyMigrated && snapshot.items.length > 0) {
+      state.usageProviderLegacyMigrated = true;
+    }
+
+    applyProviderConfigSnapshot(state, snapshot);
+  } catch (err) {
+    state.usageProviderConfigsError = toErrorMessage(err);
+  } finally {
+    state.usageProviderConfigsLoading = false;
+  }
+};
+
+const upsertProviderConfig = async (state: AppViewState, item: UsageProviderConfig) => {
+  if (!state.client || !state.connected) {
+    state.usageProviderConfigsError = "Gateway 未连接，无法保存 Provider 配置";
+    return null;
+  }
+  state.usageProviderConfigsError = null;
+  state.usageProviderConfigsLoading = true;
+  try {
+    const payload = await state.client.request("usage.provider.config.upsert", {
+      item,
+    });
+    const snapshot = parseProviderConfigSnapshot(payload);
+    applyProviderConfigSnapshot(state, snapshot);
+    const maybeItem = sanitizeUsageProviderConfig(payload.item);
+    return maybeItem?.id ?? item.id;
+  } catch (err) {
+    state.usageProviderConfigsError = toErrorMessage(err);
+    return null;
+  } finally {
+    state.usageProviderConfigsLoading = false;
+  }
+};
+
+const deleteProviderConfig = async (state: AppViewState, id: string) => {
+  if (!state.client || !state.connected) {
+    state.usageProviderConfigsError = "Gateway 未连接，无法删除 Provider 配置";
+    return false;
+  }
+  state.usageProviderConfigsError = null;
+  state.usageProviderConfigsLoading = true;
+  try {
+    const payload = await state.client.request("usage.provider.config.delete", { id });
+    const snapshot = parseProviderConfigSnapshot(payload);
+    applyProviderConfigSnapshot(state, snapshot);
+    return true;
+  } catch (err) {
+    state.usageProviderConfigsError = toErrorMessage(err);
+    return false;
+  } finally {
+    state.usageProviderConfigsLoading = false;
+  }
+};
+
+const stopProviderConfigSync = () => {
+  if (providerConfigSyncTimer !== null) {
+    window.clearInterval(providerConfigSyncTimer);
+    providerConfigSyncTimer = null;
+  }
+  if (providerConfigFocusListener) {
+    window.removeEventListener("focus", providerConfigFocusListener);
+    providerConfigFocusListener = null;
+  }
+  providerConfigSyncHost = null;
+};
+
+const ensureProviderConfigSync = (state: AppViewState) => {
+  const shouldSync = state.tab === "usage" && Boolean(state.client) && state.connected;
+  if (!shouldSync) {
+    if (providerConfigSyncHost === state) {
+      stopProviderConfigSync();
+    }
+    return;
+  }
+
+  if (providerConfigSyncHost !== state) {
+    stopProviderConfigSync();
+    providerConfigSyncHost = state;
+    providerConfigFocusListener = () => {
+      if (providerConfigSyncHost !== state) {
+        return;
+      }
+      void loadProviderConfigsFromGateway(state, { force: true, skipLegacyMigration: true });
+    };
+    window.addEventListener("focus", providerConfigFocusListener);
+    providerConfigSyncTimer = window.setInterval(() => {
+      if (providerConfigSyncHost !== state) {
+        return;
+      }
+      void loadProviderConfigsFromGateway(state, { force: true, skipLegacyMigration: true });
+    }, PROVIDER_CONFIG_SYNC_INTERVAL_MS);
+    void loadProviderConfigsFromGateway(state, { force: true });
+    return;
+  }
+
+  void loadProviderConfigsFromGateway(state);
+};
+
 export function renderUsageTab(state: AppViewState) {
+  ensureProviderConfigSync(state);
   if (state.tab !== "usage") {
     return nothing;
   }
@@ -145,6 +343,8 @@ export function renderUsageTab(state: AppViewState) {
       cards: state.usageProviderCards,
       adding: state.usageProviderAdding,
       autoRefresh: state.usageProviderAutoRefresh,
+      loading: state.usageProviderConfigsLoading,
+      error: state.usageProviderConfigsError,
       form: state.usageProviderForm,
       onToggleAdd: () => {
         state.usageProviderAdding = !state.usageProviderAdding;
@@ -171,28 +371,32 @@ export function renderUsageTab(state: AppViewState) {
           intervalSec: Number.isFinite(intervalSec) ? Math.max(10, Math.floor(intervalSec)) : 60,
           timeoutMs: Number.isFinite(timeoutMs) ? Math.max(2000, Math.floor(timeoutMs)) : 12000,
         };
-        const configs = [...state.usageProviderConfigs, next];
-        saveProviderConfigs(state, configs);
-        state.usageProviderForm = {
-          name: "",
-          type: "sub2api",
-          baseUrl: "",
-          apiKey: "",
-          intervalSec: "60",
-          timeoutMs: "12000",
-        };
-        void refreshProvider(state, next.id);
-        scheduleProviderAutoRefresh(state);
+        void (async () => {
+          const savedId = await upsertProviderConfig(state, next);
+          if (!savedId) {
+            return;
+          }
+          state.usageProviderForm = {
+            name: "",
+            type: "sub2api",
+            baseUrl: "",
+            apiKey: "",
+            intervalSec: "60",
+            timeoutMs: "12000",
+          };
+          void refreshProvider(state, savedId);
+        })();
       },
       onDelete: (id) => {
-        saveProviderConfigs(
-          state,
-          state.usageProviderConfigs.filter((entry) => entry.id !== id),
-        );
-        const clone = { ...state.usageProviderCards };
-        delete clone[id];
-        state.usageProviderCards = clone;
-        scheduleProviderAutoRefresh(state);
+        void (async () => {
+          const ok = await deleteProviderConfig(state, id);
+          if (!ok) {
+            return;
+          }
+          const clone = { ...state.usageProviderCards };
+          delete clone[id];
+          state.usageProviderCards = clone;
+        })();
       },
       onRefreshOne: (id) => {
         void refreshProvider(state, id);

@@ -31,6 +31,11 @@
   - 支持多 Provider 配置（名称、Base URL、API Key、刷新间隔、超时）。
   - 展示余量、周期用量、RPM/TPM、延迟、最后刷新时间。
   - 支持展开原始 JSON 便于排障。
+  - 新增跨浏览器配置同步 MVP：
+    - Provider 配置持久化到 Gateway：`~/.openclaw/settings/usage-providers.json`（权限 `600`）。
+    - 新增 RPC：`usage.provider.config.list`、`usage.provider.config.upsert`、`usage.provider.config.delete`。
+    - 首次进入 Usage 页时，若服务端为空且本地有旧配置，自动执行一次 localStorage → Gateway 迁移。
+    - 同步刷新策略：进入 Usage 页、窗口 focus、每 30 秒轮询拉取配置。
 
 ## 部署（macOS）
 

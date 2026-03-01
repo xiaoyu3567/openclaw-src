@@ -7,6 +7,8 @@ type ProviderUsageViewProps = {
   cards: Record<string, UsageProviderCardState>;
   adding: boolean;
   autoRefresh: boolean;
+  loading: boolean;
+  error: string | null;
   form: {
     name: string;
     type: "sub2api";
@@ -140,13 +142,27 @@ export function renderProviderUsagePanel(props: ProviderUsageViewProps) {
         </div>
         <div class="provider-panel__actions">
           <label class="provider-switch">
-            <input type="checkbox" .checked=${props.autoRefresh} @change=${(e: Event) => props.onToggleAutoRefresh((e.target as HTMLInputElement).checked)} />
+            <input
+              type="checkbox"
+              .checked=${props.autoRefresh}
+              ?disabled=${props.loading}
+              @change=${(e: Event) => props.onToggleAutoRefresh((e.target as HTMLInputElement).checked)}
+            />
             自动刷新
           </label>
-          <button class="btn btn-sm" @click=${props.onRefreshAll}>全部刷新</button>
-          <button class="btn btn-sm" @click=${props.onToggleAdd}>${props.adding ? "收起" : "添加"}</button>
+          <button class="btn btn-sm" @click=${props.onRefreshAll} ?disabled=${props.loading}>全部刷新</button>
+          <button class="btn btn-sm" @click=${props.onToggleAdd} ?disabled=${props.loading}>${props.adding ? "收起" : "添加"}</button>
         </div>
       </div>
+
+      ${
+        props.loading
+          ? html`
+              <div class="muted">同步 Provider 配置中...</div>
+            `
+          : nothing
+      }
+      ${props.error ? html`<div class="callout danger">${props.error}</div>` : nothing}
 
       ${
         props.adding
@@ -160,7 +176,7 @@ export function renderProviderUsagePanel(props: ProviderUsageViewProps) {
                 <input placeholder="API Key" .value=${props.form.apiKey} @input=${(e: Event) => props.onFormFieldChange("apiKey", (e.target as HTMLInputElement).value)} />
                 <input placeholder="刷新间隔秒（默认60）" .value=${props.form.intervalSec} @input=${(e: Event) => props.onFormFieldChange("intervalSec", (e.target as HTMLInputElement).value)} />
                 <input placeholder="超时毫秒（默认12000）" .value=${props.form.timeoutMs} @input=${(e: Event) => props.onFormFieldChange("timeoutMs", (e.target as HTMLInputElement).value)} />
-                <button class="btn btn-sm" @click=${props.onAdd}>保存并查询</button>
+                <button class="btn btn-sm" @click=${props.onAdd} ?disabled=${props.loading}>保存并查询</button>
               </div>
             `
           : nothing

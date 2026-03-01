@@ -61,7 +61,6 @@ import type { SkillMessage } from "./controllers/skills.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
 import type { UsageProviderCardState, UsageProviderConfig } from "./provider-usage.ts";
-import { loadUsageProviderConfigs } from "./provider-usage.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import type { ResolvedTheme, ThemeMode } from "./theme.ts";
 import type {
@@ -301,10 +300,15 @@ export class OpenClawApp extends LitElement {
   @state() usageLogFilterHasTools = false;
   @state() usageLogFilterQuery = "";
 
-  @state() usageProviderConfigs: UsageProviderConfig[] = loadUsageProviderConfigs();
+  @state() usageProviderConfigs: UsageProviderConfig[] = [];
   @state() usageProviderCards: Record<string, UsageProviderCardState> = {};
   @state() usageProviderAdding = false;
   @state() usageProviderAutoRefresh = false;
+  @state() usageProviderConfigsLoading = false;
+  @state() usageProviderConfigsError: string | null = null;
+  @state() usageProviderConfigsLoadedAt: number | null = null;
+  @state() usageProviderConfigsVersion = 0;
+  @state() usageProviderLegacyMigrated = false;
   @state() usageProviderForm = {
     name: "",
     type: "sub2api" as const,

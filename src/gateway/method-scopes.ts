@@ -55,6 +55,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "usage.status",
     "usage.cost",
     "usage.provider.fetch",
+    "usage.provider.config.list",
     "tts.status",
     "tts.providers",
     "models.list",
@@ -99,6 +100,8 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "chat.abort",
     "browser.request",
     "push.test",
+    "usage.provider.config.upsert",
+    "usage.provider.config.delete",
   ],
   [ADMIN_SCOPE]: [
     "channels.logout",
