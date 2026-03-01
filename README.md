@@ -9,6 +9,8 @@
   - 创建支持完整 key、短后缀（`agent:main:xxx`）、随机后缀，并自动切换到新会话。
   - 删除支持按序号、完整 key、短尾 key 匹配。
   - 删除失败不再静默，统一显示明确错误信息。
+  - Chat 会话下拉框改为显示 all sessions（不再仅展示 recent-only 会话）。
+  - 侧边栏点击 Chat 时默认保留当前会话；仅在当前会话不存在时回退到 main。
 
 - 输入体验优化
   - `Enter` 改为换行。
@@ -30,6 +32,7 @@
   - 在 Usage 页增加 Provider 用量卡片。
   - 支持多 Provider 配置（名称、Base URL、API Key、刷新间隔、超时）。
   - 展示余量、周期用量、RPM/TPM、延迟、最后刷新时间。
+  - 默认折叠“今日用量”“累计用量”详情，减少首屏信息噪音。
   - 支持展开原始 JSON 便于排障。
   - 新增跨浏览器配置同步 MVP：
     - Provider 配置持久化到 Gateway：`~/.openclaw/settings/usage-providers.json`（权限 `600`）。

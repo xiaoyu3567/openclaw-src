@@ -48,7 +48,7 @@ function renderUsageRows(label: string, payload: Record<string, unknown> | undef
   }
   const entries = Object.entries(payload);
   return html`
-    <details class="provider-usage-details" open>
+    <details class="provider-usage-details">
       <summary>${label}</summary>
       <div class="provider-usage-grid">
         ${entries.map(

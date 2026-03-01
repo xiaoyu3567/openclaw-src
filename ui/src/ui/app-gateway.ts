@@ -2,7 +2,7 @@ import {
   GATEWAY_EVENT_UPDATE_AVAILABLE,
   type GatewayUpdateAvailableEventPayload,
 } from "../../../src/gateway/events.js";
-import { CHAT_SESSIONS_ACTIVE_MINUTES, flushChatQueueForEvent } from "./app-chat.ts";
+import { flushChatQueueForEvent } from "./app-chat.ts";
 import type { EventLogEntry } from "./app-events.ts";
 import {
   applySettings,
@@ -246,7 +246,8 @@ function handleTerminalChatEvent(
 
   window.setTimeout(() => {
     void loadSessions(host as unknown as OpenClawApp, {
-      activeMinutes: CHAT_SESSIONS_ACTIVE_MINUTES,
+      activeMinutes: 0,
+      limit: 0,
     });
   }, 150);
 }

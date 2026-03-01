@@ -117,8 +117,10 @@ async function sendChatMessageNow(
       host as unknown as Parameters<typeof setLastActiveSessionKey>[0],
       host.sessionKey,
     );
+    // Chat session switcher should include all sessions, not only recently active ones.
     void loadSessions(host as unknown as OpenClawApp, {
-      activeMinutes: CHAT_SESSIONS_ACTIVE_MINUTES,
+      activeMinutes: 0,
+      limit: 0,
     });
   }
   if (ok && opts?.restoreDraft && opts.previousDraft?.trim()) {
@@ -208,8 +210,10 @@ export async function handleSendChat(
 export async function refreshChat(host: ChatHost, opts?: { scheduleScroll?: boolean }) {
   await Promise.all([
     loadChatHistory(host as unknown as OpenClawApp),
+    // Keep chat dropdown consistent by loading the full session list.
     loadSessions(host as unknown as OpenClawApp, {
-      activeMinutes: CHAT_SESSIONS_ACTIVE_MINUTES,
+      activeMinutes: 0,
+      limit: 0,
     }),
     refreshChatAvatar(host),
   ]);

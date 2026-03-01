@@ -64,7 +64,7 @@ describe("control UI routing", () => {
     expect(window.location.pathname).toBe("/channels");
   });
 
-  it("resets to the main session when opening chat from sidebar navigation", async () => {
+  it("keeps current session when opening chat from sidebar navigation", async () => {
     const app = mountApp("/sessions?session=agent:main:subagent:task-123");
     await app.updateComplete;
 
@@ -74,9 +74,44 @@ describe("control UI routing", () => {
 
     await app.updateComplete;
     expect(app.tab).toBe("chat");
+    expect(app.sessionKey).toBe("agent:main:subagent:task-123");
+    expect(window.location.pathname).toBe("/chat");
+    expect(new URLSearchParams(window.location.search).get("session")).toBe(
+      "agent:main:subagent:task-123",
+    );
+  });
+
+  it("falls back to main session when current session is missing", async () => {
+    const app = mountApp("/sessions?session=agent:main:subagent:missing");
+    await app.updateComplete;
+
+    app.sessionsResult = {
+      ts: Date.now(),
+      path: "/tmp/sessions.json",
+      count: 1,
+      defaults: {
+        model: null,
+        contextTokens: null,
+      },
+      sessions: [
+        {
+          key: "main",
+          kind: "direct",
+          updatedAt: Date.now(),
+        },
+      ],
+    };
+
+    await app.updateComplete;
+    const link = app.querySelector<HTMLAnchorElement>('a.nav-item[href="/chat"]');
+    expect(link).not.toBeNull();
+    link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
+
+    await app.updateComplete;
+    expect(app.tab).toBe("chat");
     expect(app.sessionKey).toBe("main");
     expect(window.location.pathname).toBe("/chat");
-    expect(window.location.search).toBe("?session=main");
+    expect(new URLSearchParams(window.location.search).get("session")).toBe("main");
   });
 
   it("keeps chat and nav usable on narrow viewports", async () => {

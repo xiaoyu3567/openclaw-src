@@ -6,7 +6,11 @@ import { syncUrlWithSessionKey } from "./app-settings.ts";
 import type { AppViewState } from "./app-view-state.ts";
 import { OpenClawApp } from "./app.ts";
 import { ChatState, loadChatHistory } from "./controllers/chat.ts";
-import { createSessionAndRefresh, deleteSessionAndRefresh } from "./controllers/sessions.ts";
+import {
+  createSessionAndRefresh,
+  deleteSessionAndRefresh,
+  loadSessions,
+} from "./controllers/sessions.ts";
 import { icons } from "./icons.ts";
 import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
 import type { ThemeTransitionContext } from "./theme-transition.ts";
@@ -48,6 +52,22 @@ function resetChatStateForSessionSwitch(state: AppViewState, sessionKey: string)
   });
 }
 
+function resolveSidebarChatTargetSessionKey(state: AppViewState): string {
+  const currentSessionKey = state.sessionKey.trim();
+  const fallbackMainSessionKey = resolveSidebarChatSessionKey(state);
+  if (!currentSessionKey) {
+    return fallbackMainSessionKey;
+  }
+
+  const sessions = state.sessionsResult?.sessions;
+  if (!sessions || sessions.length === 0) {
+    return currentSessionKey;
+  }
+
+  const exists = sessions.some((entry) => entry.key === currentSessionKey);
+  return exists ? currentSessionKey : fallbackMainSessionKey;
+}
+
 function resolveAgentSessionPrefix(sessionKey: string): string {
   const normalized = sessionKey.trim();
   const match = /^agent:[^:]+:/.exec(normalized);
@@ -82,9 +102,9 @@ export function renderTab(state: AppViewState, tab: Tab) {
         }
         event.preventDefault();
         if (tab === "chat") {
-          const mainSessionKey = resolveSidebarChatSessionKey(state);
-          if (state.sessionKey !== mainSessionKey) {
-            resetChatStateForSessionSwitch(state, mainSessionKey);
+          const targetSessionKey = resolveSidebarChatTargetSessionKey(state);
+          if (state.sessionKey !== targetSessionKey) {
+            resetChatStateForSessionSwitch(state, targetSessionKey);
             void state.loadAssistantIdentity();
           }
         }
@@ -130,7 +150,13 @@ export function renderChatControls(state: AppViewState) {
       next,
       true,
     );
-    void loadChatHistory(state as unknown as ChatState);
+    void Promise.all([
+      loadChatHistory(state as unknown as ChatState),
+      loadSessions(state as unknown as OpenClawApp, {
+        activeMinutes: 0,
+        limit: 0,
+      }),
+    ]);
   };
   // Refresh icon
   const refreshIcon = html`
