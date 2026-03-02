@@ -48,9 +48,50 @@ run_cmd() {
   "$@"
 }
 
+wait_gateway_status_ready() {
+  local attempts=${1:-30}
+  local delay_sec=${2:-1}
+  local out=""
+  local i
+
+  for i in $(seq 1 "$attempts"); do
+    out=$(openclaw gateway status 2>&1 || true)
+    if printf "%s" "$out" | grep -Eiq "Service unit not found|Service not installed|Could not find service|RPC probe: failed"; then
+      sleep "$delay_sec"
+      continue
+    fi
+    if [ -n "$out" ]; then
+      printf "%s\n" "$out"
+    fi
+    return 0
+  done
+
+  printf "%s\n" "$out" >&2
+  return 1
+}
+
+wait_gateway_http_ready() {
+  local attempts=${1:-30}
+  local delay_sec=${2:-1}
+  local i
+
+  for i in $(seq 1 "$attempts"); do
+    if curl -fsS "http://127.0.0.1:${PORT}/" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$delay_sec"
+  done
+  return 1
+}
+
 ensure_gateway_service() {
   log_step "RUN" "openclaw gateway install"
   run_cmd openclaw gateway install
+
+  log_step "WAIT" "gateway status after install"
+  if [ "$DRY_RUN" -eq 0 ]; then
+    wait_gateway_status_ready 40 1
+  fi
 
   log_step "RUN" "openclaw gateway start"
   if run_cmd openclaw gateway start; then
@@ -60,8 +101,15 @@ ensure_gateway_service() {
     run_cmd openclaw gateway restart
   fi
 
-  log_step "RUN" "openclaw gateway status"
-  run_cmd openclaw gateway status
+  log_step "WAIT" "gateway status after start"
+  if [ "$DRY_RUN" -eq 0 ]; then
+    wait_gateway_status_ready 40 1
+  fi
+
+  log_step "WAIT" "gateway http ready"
+  if [ "$DRY_RUN" -eq 0 ]; then
+    wait_gateway_http_ready 40 1
+  fi
 }
 
 require_cmd() {
@@ -251,7 +299,7 @@ run_cmd openclaw gateway restart
 log_section "Step 7/7 - Verify"
 run_cmd openclaw gateway status
 if [ "$DRY_RUN" -eq 0 ]; then
-  if curl -fsS "http://127.0.0.1:${PORT}/" >/dev/null; then
+  if wait_gateway_http_ready 20 1; then
     log_step "OK" "http://127.0.0.1:${PORT}/ reachable"
   else
     printf "Error: gateway HTTP check failed on port %s\n" "$PORT" >&2

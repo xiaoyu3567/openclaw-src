@@ -60,9 +60,58 @@ function Resolve-OpenClawRoot {
   throw "Unable to resolve global openclaw install root"
 }
 
+function Wait-GatewayStatusReady {
+  param(
+    [int]$Attempts = 40,
+    [int]$DelaySec = 1
+  )
+
+  $lastOutput = ""
+  for ($i = 1; $i -le $Attempts; $i++) {
+    $lastOutput = (& openclaw gateway status 2>&1 | Out-String)
+    if ($lastOutput -match "Service unit not found|Service not installed|Could not find service|RPC probe: failed") {
+      Start-Sleep -Seconds $DelaySec
+      continue
+    }
+    if (-not [string]::IsNullOrWhiteSpace($lastOutput)) {
+      Write-Host $lastOutput
+    }
+    return
+  }
+
+  throw "Gateway status did not become ready in time. Last output: $lastOutput"
+}
+
+function Wait-GatewayHttpReady {
+  param(
+    [int]$Attempts = 40,
+    [int]$DelaySec = 1
+  )
+
+  for ($i = 1; $i -le $Attempts; $i++) {
+    try {
+      $resp = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$Port/" -TimeoutSec 5
+      if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) {
+        return
+      }
+    } catch {
+      Start-Sleep -Seconds $DelaySec
+      continue
+    }
+    Start-Sleep -Seconds $DelaySec
+  }
+
+  throw "Gateway HTTP check failed on port $Port"
+}
+
 function Ensure-GatewayService {
   Write-Host "[RUN] openclaw gateway install"
   Invoke-Run "openclaw" @("gateway", "install")
+
+  if (-not $DryRun) {
+    Write-Host "[WAIT] gateway status after install"
+    Wait-GatewayStatusReady
+  }
 
   Write-Host "[RUN] openclaw gateway start"
   try {
@@ -72,8 +121,12 @@ function Ensure-GatewayService {
     Invoke-Run "openclaw" @("gateway", "restart")
   }
 
-  Write-Host "[RUN] openclaw gateway status"
-  Invoke-Run "openclaw" @("gateway", "status")
+  if (-not $DryRun) {
+    Write-Host "[WAIT] gateway status after start"
+    Wait-GatewayStatusReady
+    Write-Host "[WAIT] gateway http ready"
+    Wait-GatewayHttpReady
+  }
 }
 
 function Run-HealthOnly {
@@ -190,16 +243,8 @@ try {
   Write-Section "Step 7/7 - Verify"
   Invoke-Run "openclaw" @("gateway", "status")
   if (-not $DryRun) {
-    try {
-      $resp = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$Port/" -TimeoutSec 5
-      if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) {
-        Write-Host "[OK] http://127.0.0.1:$Port/ reachable"
-      } else {
-        throw "Gateway HTTP check failed on port $Port"
-      }
-    } catch {
-      throw "Gateway HTTP check failed on port $Port"
-    }
+    Wait-GatewayHttpReady -Attempts 20 -DelaySec 1
+    Write-Host "[OK] http://127.0.0.1:$Port/ reachable"
   }
 } catch {
   if ($BackupId -and -not $DryRun) {

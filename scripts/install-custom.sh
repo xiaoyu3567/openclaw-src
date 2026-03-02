@@ -46,7 +46,7 @@ read_required_from_tty() {
   while [ -z "$value" ]; do
     printf "%s" "$prompt" > /dev/tty
     IFS= read -r value < /dev/tty || true
-    value=$(printf "%s" "$value" | sed 's/^\s*//;s/\s*$//')
+    value=$(printf "%s" "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
   done
 
   printf "%s" "$value"
@@ -64,7 +64,7 @@ read_with_default_from_tty() {
 
   printf "%s" "$prompt" > /dev/tty
   IFS= read -r value < /dev/tty || true
-  value=$(printf "%s" "$value" | sed 's/^\s*//;s/\s*$//')
+  value=$(printf "%s" "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
   if [ -z "$value" ]; then
     value=$fallback
   fi
@@ -98,6 +98,42 @@ uninstall_existing_openclaw() {
   fi
 
   printf "OpenClaw uninstall check passed.\n"
+}
+
+wait_gateway_status_ready() {
+  local attempts=${1:-30}
+  local delay_sec=${2:-1}
+  local out=""
+  local i
+
+  for i in $(seq 1 "$attempts"); do
+    out=$(openclaw gateway status 2>&1 || true)
+    if printf "%s" "$out" | grep -Eiq "Service unit not found|Service not installed|Could not find service|RPC probe: failed"; then
+      sleep "$delay_sec"
+      continue
+    fi
+    if [ -n "$out" ]; then
+      printf "%s\n" "$out"
+    fi
+    return 0
+  done
+
+  printf "%s\n" "$out" >&2
+  return 1
+}
+
+wait_gateway_http_ready() {
+  local attempts=${1:-30}
+  local delay_sec=${2:-1}
+  local i
+
+  for i in $(seq 1 "$attempts"); do
+    if curl -fsS "http://127.0.0.1:18789/" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$delay_sec"
+  done
+  return 1
 }
 
 configure_openclaw_models() {
@@ -266,15 +302,32 @@ fi
 node scripts/deploy-assistant.mjs --action "$ACTION" --yes --branch "$BRANCH"
 
 printf "[8/8] Installing gateway service and opening dashboard...\n"
+printf "[8/8.a] openclaw gateway install\n"
 openclaw gateway install
+
+printf "[8/8.b] waiting gateway service registration\n"
+if ! wait_gateway_status_ready 40 1; then
+  printf "Error: gateway service registration check failed after install.\n" >&2
+  exit 1
+fi
+
+printf "[8/8.c] openclaw gateway start\n"
 openclaw gateway start
-openclaw gateway status
-if curl -fsS "http://127.0.0.1:18789/" >/dev/null; then
-  printf "Gateway HTTP check passed on port 18789.\n"
-else
+
+printf "[8/8.d] waiting gateway status after start\n"
+if ! wait_gateway_status_ready 40 1; then
+  printf "Error: gateway status check failed after start.\n" >&2
+  exit 1
+fi
+
+printf "[8/8.e] waiting gateway HTTP readiness\n"
+if ! wait_gateway_http_ready 40 1; then
   printf "Error: gateway HTTP check failed on port 18789.\n" >&2
   exit 1
 fi
+printf "Gateway HTTP check passed on port 18789.\n"
+
+printf "[8/8.f] openclaw dashboard\n"
 openclaw dashboard
 
 printf "\nDone. openclaw-src deployment completed.\n"

@@ -87,6 +87,50 @@ function Uninstall-ExistingOpenClaw {
   Write-Host "OpenClaw uninstall check passed."
 }
 
+function Wait-GatewayStatusReady {
+  param(
+    [int]$Attempts = 40,
+    [int]$DelaySec = 1
+  )
+
+  $lastOutput = ""
+  for ($i = 1; $i -le $Attempts; $i++) {
+    $lastOutput = (& openclaw gateway status 2>&1 | Out-String)
+    if ($lastOutput -match "Service unit not found|Service not installed|Could not find service|RPC probe: failed") {
+      Start-Sleep -Seconds $DelaySec
+      continue
+    }
+    if (-not [string]::IsNullOrWhiteSpace($lastOutput)) {
+      Write-Host $lastOutput
+    }
+    return
+  }
+
+  throw "Gateway status did not become ready in time. Last output: $lastOutput"
+}
+
+function Wait-GatewayHttpReady {
+  param(
+    [int]$Attempts = 40,
+    [int]$DelaySec = 1
+  )
+
+  for ($i = 1; $i -le $Attempts; $i++) {
+    try {
+      $resp = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:18789/" -TimeoutSec 5
+      if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) {
+        return
+      }
+    } catch {
+      Start-Sleep -Seconds $DelaySec
+      continue
+    }
+    Start-Sleep -Seconds $DelaySec
+  }
+
+  throw "Gateway HTTP check failed on port 18789"
+}
+
 function Configure-OpenClawSettings {
   $normalizedBaseUrl = $BaseUrl.TrimEnd("/")
   $provider = @{
@@ -235,13 +279,23 @@ if ($Scope -eq "full") {
 node scripts/deploy-assistant.mjs --action $action --yes --branch $Branch
 
 Write-Host "[8/8] Installing gateway service and opening dashboard..."
+Write-Host "[8/8.a] openclaw gateway install"
 openclaw gateway install
+
+Write-Host "[8/8.b] waiting gateway service registration"
+Wait-GatewayStatusReady
+
+Write-Host "[8/8.c] openclaw gateway start"
 openclaw gateway start
-openclaw gateway status
-$resp = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:18789/" -TimeoutSec 5
-if ($resp.StatusCode -lt 200 -or $resp.StatusCode -ge 500) {
-  throw "Gateway HTTP check failed on port 18789"
-}
+
+Write-Host "[8/8.d] waiting gateway status after start"
+Wait-GatewayStatusReady
+
+Write-Host "[8/8.e] waiting gateway HTTP readiness"
+Wait-GatewayHttpReady
+Write-Host "Gateway HTTP check passed on port 18789."
+
+Write-Host "[8/8.f] openclaw dashboard"
 openclaw dashboard
 
 Write-Host ""
