@@ -41,10 +41,22 @@
 curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | bash
 ```
 
+运行时会提示输入：
+
+- `sub2api baseUrl`
+- `sub2api apiKey`
+
 ### macOS / Linux（完整升级：UI + 后端）
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | bash -s -- --scope full
+```
+
+### macOS / Linux（非交互，直接传入 baseUrl/apiKey）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | \
+  bash -s -- --base-url "https://your-base-url" --api-key "your-api-key"
 ```
 
 ### Windows（PowerShell）
@@ -52,6 +64,11 @@ curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/script
 ```powershell
 iwr -useb https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.ps1 | iex
 ```
+
+运行时会提示输入：
+
+- `sub2api baseUrl`
+- `sub2api apiKey`
 
 ### Windows（PowerShell，完整升级：UI + 后端）
 
@@ -61,10 +78,24 @@ iwr -useb https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts
 powershell -ExecutionPolicy Bypass -File $tmp -Scope full
 ```
 
+### Windows（PowerShell，非交互传入 baseUrl/apiKey）
+
+```powershell
+$tmp = Join-Path $env:TEMP "install-custom.ps1"
+iwr -useb https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.ps1 -OutFile $tmp
+powershell -ExecutionPolicy Bypass -File $tmp -BaseUrl "https://your-base-url" -ApiKey "your-api-key"
+```
+
 安装脚本会自动完成：
 
 1. 检查基础依赖
-2. 强制卸载当前已安装的 OpenClaw（避免版本干扰）
-3. 使用固定命令重装 OpenClaw：`npm install -g openclaw@2026.2.25 --omit=optional --registry=https://registry.npmmirror.com`
-4. 拉取或复用 `~/.openclaw/workspace/openclaw-src`
-5. 安装依赖并执行部署助手（推荐模式）
+2. 输入 `sub2api baseUrl/apiKey`
+3. 强制卸载当前已安装的 OpenClaw（避免版本干扰）
+4. 使用固定命令重装 OpenClaw：`npm install -g openclaw@2026.2.25 --omit=optional --registry=https://registry.npmmirror.com`
+5. 自动修改 `~/.openclaw/openclaw.json`：
+   - `models.mode = "merge"`
+   - 新增 `models.providers.sub2api`（含 `baseUrl/apiKey/api/models`）
+   - `agents.defaults.model.primary = "sub2api/gpt-5.3-codex"`
+   - 新增 `agents.defaults.models["sub2api/gpt-5.3-codex"] = {}`
+6. 自动写入用量监控配置 `~/.openclaw/settings/usage-providers.json`，名称为 `sub2api`
+7. 拉取或复用 `~/.openclaw/workspace/openclaw-src`，安装依赖并执行部署助手
