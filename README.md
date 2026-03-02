@@ -35,10 +35,17 @@
 
 > 注意：安装脚本会先强制卸载当前 OpenClaw，再重新安装，确保环境干净无版本干扰。
 
-### macOS / Linux（推荐）
+### macOS / Linux（推荐，默认 full）
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | bash
+```
+
+说明：默认就是 `--scope full`，所以下面两条是等价的：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | bash
+curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | bash -s -- --scope full
 ```
 
 运行时会提示输入：
@@ -46,10 +53,10 @@ curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/script
 - `sub2api baseUrl`
 - `sub2api apiKey`
 
-### macOS / Linux（完整升级：UI + 后端）
+### macOS / Linux（仅 UI，非默认）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | bash -s -- --scope full
+curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | bash -s -- --scope ui
 ```
 
 ### macOS / Linux（非交互，直接传入 baseUrl/apiKey）
@@ -59,7 +66,7 @@ curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/script
   bash -s -- --base-url "https://your-base-url" --api-key "your-api-key"
 ```
 
-### Windows（PowerShell）
+### Windows（PowerShell，推荐，默认 full）
 
 ```powershell
 iwr -useb https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.ps1 | iex
@@ -70,12 +77,12 @@ iwr -useb https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts
 - `sub2api baseUrl`
 - `sub2api apiKey`
 
-### Windows（PowerShell，完整升级：UI + 后端）
+### Windows（PowerShell，仅 UI，非默认）
 
 ```powershell
 $tmp = Join-Path $env:TEMP "install-custom.ps1"
 iwr -useb https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.ps1 -OutFile $tmp
-powershell -ExecutionPolicy Bypass -File $tmp -Scope full
+powershell -ExecutionPolicy Bypass -File $tmp -Scope ui
 ```
 
 ### Windows（PowerShell，非交互传入 baseUrl/apiKey）

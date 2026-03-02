@@ -1,6 +1,6 @@
 param(
   [ValidateSet("ui", "full")]
-  [string]$Scope = "ui",
+  [string]$Scope = "full",
   [string]$Branch = "main",
   [string]$Repo = "https://github.com/xiaoyu3567/openclaw-src",
   [string]$BaseUrl = "",

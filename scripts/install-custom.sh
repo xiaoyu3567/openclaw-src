@@ -4,7 +4,7 @@ set -euo pipefail
 
 REPO_URL="https://github.com/xiaoyu3567/openclaw-src"
 BRANCH="main"
-SCOPE="ui"
+SCOPE="full"
 OPENCLAW_VERSION="2026.2.25"
 OPENCLAW_REGISTRY="https://registry.npmmirror.com"
 BASE_URL="${OPENCLAW_SUB2API_BASE_URL:-}"
@@ -18,7 +18,7 @@ Usage: install-custom.sh [options]
 
 Options:
   --branch <name>      Branch to deploy (default: main)
-  --scope <ui|full>    Deploy scope (default: ui)
+  --scope <ui|full>    Deploy scope (default: full)
   --repo <url>         Repo URL (default: https://github.com/xiaoyu3567/openclaw-src)
   --base-url <url>     sub2api baseUrl (optional, prompts if empty)
   --api-key <key>      sub2api apiKey (optional, prompts if empty)
