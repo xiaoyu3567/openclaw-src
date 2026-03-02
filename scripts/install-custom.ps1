@@ -236,6 +236,12 @@ node scripts/deploy-assistant.mjs --action $action --yes --branch $Branch
 
 Write-Host "[8/8] Installing gateway service and opening dashboard..."
 openclaw gateway install
+openclaw gateway start
+openclaw gateway status
+$resp = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:18789/" -TimeoutSec 5
+if ($resp.StatusCode -lt 200 -or $resp.StatusCode -ge 500) {
+  throw "Gateway HTTP check failed on port 18789"
+}
 openclaw dashboard
 
 Write-Host ""

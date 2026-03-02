@@ -60,6 +60,22 @@ function Resolve-OpenClawRoot {
   throw "Unable to resolve global openclaw install root"
 }
 
+function Ensure-GatewayService {
+  Write-Host "[RUN] openclaw gateway install"
+  Invoke-Run "openclaw" @("gateway", "install")
+
+  Write-Host "[RUN] openclaw gateway start"
+  try {
+    Invoke-Run "openclaw" @("gateway", "start")
+  } catch {
+    Write-Warning "gateway start failed, trying restart"
+    Invoke-Run "openclaw" @("gateway", "restart")
+  }
+
+  Write-Host "[RUN] openclaw gateway status"
+  Invoke-Run "openclaw" @("gateway", "status")
+}
+
 function Run-HealthOnly {
   Write-Section "Health check"
   foreach ($cmd in @("git", "node", "pnpm", "openclaw")) {
@@ -167,6 +183,8 @@ try {
   }
 
   Write-Section "Step 6/7 - Restart gateway"
+  Ensure-GatewayService
+  Write-Host "[RUN] openclaw gateway restart"
   Invoke-Run "openclaw" @("gateway", "restart")
 
   Write-Section "Step 7/7 - Verify"
@@ -176,9 +194,11 @@ try {
       $resp = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$Port/" -TimeoutSec 5
       if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) {
         Write-Host "[OK] http://127.0.0.1:$Port/ reachable"
+      } else {
+        throw "Gateway HTTP check failed on port $Port"
       }
     } catch {
-      Write-Warning "Gateway HTTP check failed on port $Port"
+      throw "Gateway HTTP check failed on port $Port"
     }
   }
 } catch {

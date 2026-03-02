@@ -267,6 +267,14 @@ node scripts/deploy-assistant.mjs --action "$ACTION" --yes --branch "$BRANCH"
 
 printf "[8/8] Installing gateway service and opening dashboard...\n"
 openclaw gateway install
+openclaw gateway start
+openclaw gateway status
+if curl -fsS "http://127.0.0.1:18789/" >/dev/null; then
+  printf "Gateway HTTP check passed on port 18789.\n"
+else
+  printf "Error: gateway HTTP check failed on port 18789.\n" >&2
+  exit 1
+fi
 openclaw dashboard
 
 printf "\nDone. openclaw-src deployment completed.\n"

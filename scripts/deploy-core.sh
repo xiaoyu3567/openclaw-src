@@ -48,6 +48,22 @@ run_cmd() {
   "$@"
 }
 
+ensure_gateway_service() {
+  log_step "RUN" "openclaw gateway install"
+  run_cmd openclaw gateway install
+
+  log_step "RUN" "openclaw gateway start"
+  if run_cmd openclaw gateway start; then
+    :
+  else
+    log_step "WARN" "gateway start failed, trying restart"
+    run_cmd openclaw gateway restart
+  fi
+
+  log_step "RUN" "openclaw gateway status"
+  run_cmd openclaw gateway status
+}
+
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     printf "Error: required command not found: %s\n" "$1" >&2
@@ -228,6 +244,8 @@ else
 fi
 
 log_section "Step 6/7 - Restart gateway"
+ensure_gateway_service
+log_step "RUN" "openclaw gateway restart"
 run_cmd openclaw gateway restart
 
 log_section "Step 7/7 - Verify"
@@ -236,7 +254,8 @@ if [ "$DRY_RUN" -eq 0 ]; then
   if curl -fsS "http://127.0.0.1:${PORT}/" >/dev/null; then
     log_step "OK" "http://127.0.0.1:${PORT}/ reachable"
   else
-    printf "Warning: gateway HTTP check failed on port %s\n" "$PORT" >&2
+    printf "Error: gateway HTTP check failed on port %s\n" "$PORT" >&2
+    exit 1
   fi
 fi
 
