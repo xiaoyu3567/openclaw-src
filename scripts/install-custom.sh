@@ -283,6 +283,7 @@ require_cmd openclaw
 printf "[5/9] Writing OpenClaw model/agent/usage config...\n"
 configure_openclaw_models
 configure_usage_provider
+openclaw config set gateway.mode local
 
 printf "[6/9] Preparing repository and dependencies...\n"
 mkdir -p "$WORKSPACE"
