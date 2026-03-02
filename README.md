@@ -5,7 +5,6 @@
 `openclaw-src` 是基于 OpenClaw 的实用增强版，目标是让日常使用更顺手：会话管理更高效、thinking 状态更透明、异常恢复更可靠。
 
 ![Control UI 新特性预览 1](show1.png)
-![Control UI 新特性预览 2](show2.png)
 
 ## 2. 核心特性
 
@@ -35,7 +34,7 @@
 
 > 注意：安装脚本会先强制卸载当前 OpenClaw，再重新安装，确保环境干净无版本干扰！！！！
 
-### macOS / Linux（推荐，默认 full）
+### macOS / Linux
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | bash
@@ -46,24 +45,10 @@ curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/script
 - `sub2api baseUrl`（`https://jp.code.respyun.com/v1`，回车默认）
 - `sub2api apiKey`（可见输入）
 
-### macOS / Linux（仅 UI，非默认）
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | bash -s -- --scope ui
-```
-
-### Windows（PowerShell，推荐，默认 full）
+### Windows（现在还存在bug）
 
 ```powershell
 iwr -useb https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.ps1 | iex
-```
-
-### Windows（PowerShell，仅 UI，非默认）
-
-```powershell
-$tmp = Join-Path $env:TEMP "install-custom.ps1"
-iwr -useb https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.ps1 -OutFile $tmp
-powershell -ExecutionPolicy Bypass -File $tmp -Scope ui
 ```
 
 安装脚本会自动完成：
