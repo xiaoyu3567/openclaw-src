@@ -106,4 +106,5 @@ powershell -ExecutionPolicy Bypass -File $tmp -BaseUrl "https://your-base-url" -
    - 新增 `agents.defaults.models["sub2api/gpt-5.3-codex"] = {}`
 6. 自动写入用量监控配置 `~/.openclaw/settings/usage-providers.json`，名称为 `sub2api`
 7. 拉取或复用 `~/.openclaw/workspace/openclaw-src`，安装依赖并执行部署助手
-8. 依次执行并校验 `openclaw gateway install` -> `openclaw gateway start` -> `openclaw gateway status` -> HTTP 连通性检查，再执行 `openclaw dashboard` 自动打开控制台页面
+8. 依次执行并校验 `openclaw gateway install` -> `openclaw gateway start` -> `openclaw gateway status` -> HTTP 连通性检查，确认 gateway 完全就绪
+9. 执行 `openclaw dashboard` 自动打开控制台页面

@@ -255,7 +255,7 @@ if [ "$SCOPE" != "ui" ] && [ "$SCOPE" != "full" ]; then
   exit 1
 fi
 
-printf "[1/8] Checking base tools...\n"
+printf "[1/9] Checking base tools...\n"
 require_cmd curl
 require_cmd git
 require_cmd node
@@ -270,21 +270,21 @@ if ! command -v pnpm >/dev/null 2>&1; then
 fi
 require_cmd pnpm
 
-printf "[2/8] Collecting sub2api credentials...\n"
+printf "[2/9] Collecting sub2api credentials...\n"
 prompt_sub2api_credentials
 
-printf "[3/8] Uninstalling existing OpenClaw (mandatory clean install)...\n"
+printf "[3/9] Uninstalling existing OpenClaw (mandatory clean install)...\n"
 uninstall_existing_openclaw
 
-printf "[4/8] Installing OpenClaw %s...\n" "$OPENCLAW_VERSION"
+printf "[4/9] Installing OpenClaw %s...\n" "$OPENCLAW_VERSION"
 npm install -g "openclaw@${OPENCLAW_VERSION}" --omit=optional --registry="$OPENCLAW_REGISTRY"
 require_cmd openclaw
 
-printf "[5/8] Writing OpenClaw model/agent/usage config...\n"
+printf "[5/9] Writing OpenClaw model/agent/usage config...\n"
 configure_openclaw_models
 configure_usage_provider
 
-printf "[6/8] Preparing repository and dependencies...\n"
+printf "[6/9] Preparing repository and dependencies...\n"
 mkdir -p "$WORKSPACE"
 if [ -d "$REPO_DIR/.git" ]; then
   printf "Repo exists: %s\n" "$REPO_DIR"
@@ -294,40 +294,40 @@ fi
 cd "$REPO_DIR"
 pnpm install
 
-printf "[7/8] Running deploy assistant...\n"
+printf "[7/9] Running deploy assistant...\n"
 ACTION="deploy-recommended"
 if [ "$SCOPE" = "full" ]; then
   ACTION="deploy-full"
 fi
 node scripts/deploy-assistant.mjs --action "$ACTION" --yes --branch "$BRANCH"
 
-printf "[8/8] Installing gateway service and opening dashboard...\n"
-printf "[8/8.a] openclaw gateway install\n"
+printf "[8/9] Ensuring gateway service is fully ready...\n"
+printf "[8/9.a] openclaw gateway install\n"
 openclaw gateway install
 
-printf "[8/8.b] waiting gateway service registration\n"
+printf "[8/9.b] waiting gateway service registration\n"
 if ! wait_gateway_status_ready 40 1; then
   printf "Error: gateway service registration check failed after install.\n" >&2
   exit 1
 fi
 
-printf "[8/8.c] openclaw gateway start\n"
+printf "[8/9.c] openclaw gateway start\n"
 openclaw gateway start
 
-printf "[8/8.d] waiting gateway status after start\n"
+printf "[8/9.d] waiting gateway status after start\n"
 if ! wait_gateway_status_ready 40 1; then
   printf "Error: gateway status check failed after start.\n" >&2
   exit 1
 fi
 
-printf "[8/8.e] waiting gateway HTTP readiness\n"
+printf "[8/9.e] waiting gateway HTTP readiness\n"
 if ! wait_gateway_http_ready 40 1; then
   printf "Error: gateway HTTP check failed on port 18789.\n" >&2
   exit 1
 fi
 printf "Gateway HTTP check passed on port 18789.\n"
 
-printf "[8/8.f] openclaw dashboard\n"
+printf "[9/9] openclaw dashboard\n"
 openclaw dashboard
 
 printf "\nDone. openclaw-src deployment completed.\n"

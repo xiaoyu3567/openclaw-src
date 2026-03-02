@@ -227,7 +227,7 @@ function Configure-UsageProvider {
   Set-Content -Path $filePath -Value $json -Encoding UTF8
 }
 
-Write-Host "[1/8] Checking base tools..."
+Write-Host "[1/9] Checking base tools..."
 Require-Command "git"
 Require-Command "node"
 Require-Command "npm"
@@ -241,21 +241,21 @@ if (-not (Get-Command "pnpm" -ErrorAction SilentlyContinue)) {
 }
 Require-Command "pnpm"
 
-Write-Host "[2/8] Collecting sub2api credentials..."
+Write-Host "[2/9] Collecting sub2api credentials..."
 Prompt-Sub2ApiCredentials
 
-Write-Host "[3/8] Uninstalling existing OpenClaw (mandatory clean install)..."
+Write-Host "[3/9] Uninstalling existing OpenClaw (mandatory clean install)..."
 Uninstall-ExistingOpenClaw
 
-Write-Host "[4/8] Installing OpenClaw $OpenClawVersion..."
+Write-Host "[4/9] Installing OpenClaw $OpenClawVersion..."
 npm install -g "openclaw@$OpenClawVersion" --omit=optional --registry="$OpenClawRegistry"
 Require-Command "openclaw"
 
-Write-Host "[5/8] Writing OpenClaw model/agent/usage config..."
+Write-Host "[5/9] Writing OpenClaw model/agent/usage config..."
 Configure-OpenClawSettings
 Configure-UsageProvider
 
-Write-Host "[6/8] Preparing repository and dependencies..."
+Write-Host "[6/9] Preparing repository and dependencies..."
 $workspace = Join-Path $HOME ".openclaw\workspace"
 $repoDir = Join-Path $workspace "openclaw-src"
 if (-not (Test-Path $workspace)) {
@@ -271,31 +271,31 @@ if (Test-Path (Join-Path $repoDir ".git")) {
 Set-Location $repoDir
 pnpm install
 
-Write-Host "[7/8] Running deploy assistant..."
+Write-Host "[7/9] Running deploy assistant..."
 $action = "deploy-recommended"
 if ($Scope -eq "full") {
   $action = "deploy-full"
 }
 node scripts/deploy-assistant.mjs --action $action --yes --branch $Branch
 
-Write-Host "[8/8] Installing gateway service and opening dashboard..."
-Write-Host "[8/8.a] openclaw gateway install"
+Write-Host "[8/9] Ensuring gateway service is fully ready..."
+Write-Host "[8/9.a] openclaw gateway install"
 openclaw gateway install
 
-Write-Host "[8/8.b] waiting gateway service registration"
+Write-Host "[8/9.b] waiting gateway service registration"
 Wait-GatewayStatusReady
 
-Write-Host "[8/8.c] openclaw gateway start"
+Write-Host "[8/9.c] openclaw gateway start"
 openclaw gateway start
 
-Write-Host "[8/8.d] waiting gateway status after start"
+Write-Host "[8/9.d] waiting gateway status after start"
 Wait-GatewayStatusReady
 
-Write-Host "[8/8.e] waiting gateway HTTP readiness"
+Write-Host "[8/9.e] waiting gateway HTTP readiness"
 Wait-GatewayHttpReady
 Write-Host "Gateway HTTP check passed on port 18789."
 
-Write-Host "[8/8.f] openclaw dashboard"
+Write-Host "[9/9] openclaw dashboard"
 openclaw dashboard
 
 Write-Host ""
