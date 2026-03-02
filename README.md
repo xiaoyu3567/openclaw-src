@@ -1,6 +1,6 @@
 # openclaw-src
 
-## 1. 概述 + 图片
+## 1. 概述
 
 `openclaw-src` 是基于 OpenClaw 的实用增强版，目标是让日常使用更顺手：会话管理更高效、thinking 状态更透明、异常恢复更可靠。
 
@@ -31,9 +31,9 @@
 
 ## 3. 一键部署
 
-不需要手动 clone。直接运行：
+直接运行：
 
-> 注意：安装脚本会先强制卸载当前 OpenClaw，再重新安装，确保环境干净无版本干扰。
+> 注意：安装脚本会先强制卸载当前 OpenClaw，再重新安装，确保环境干净无版本干扰！！！！
 
 ### macOS / Linux（推荐，默认 full）
 
@@ -41,16 +41,9 @@
 curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | bash
 ```
 
-说明：默认就是 `--scope full`，所以下面两条是等价的：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | bash
-curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | bash -s -- --scope full
-```
-
 运行时会提示输入：
 
-- `sub2api baseUrl`（默认 `https://jp.code.respyun.com/v1`，可改）
+- `sub2api baseUrl`（`https://jp.code.respyun.com/v1`，回车默认）
 - `sub2api apiKey`（可见输入）
 
 ### macOS / Linux（仅 UI，非默认）
@@ -59,23 +52,11 @@ curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/script
 curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | bash -s -- --scope ui
 ```
 
-### macOS / Linux（非交互，直接传入 baseUrl/apiKey）
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.sh | \
-  bash -s -- --base-url "https://your-base-url" --api-key "your-api-key"
-```
-
 ### Windows（PowerShell，推荐，默认 full）
 
 ```powershell
 iwr -useb https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.ps1 | iex
 ```
-
-运行时会提示输入：
-
-- `sub2api baseUrl`（默认 `https://jp.code.respyun.com/v1`，可改）
-- `sub2api apiKey`（可见输入）
 
 ### Windows（PowerShell，仅 UI，非默认）
 
@@ -83,14 +64,6 @@ iwr -useb https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts
 $tmp = Join-Path $env:TEMP "install-custom.ps1"
 iwr -useb https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.ps1 -OutFile $tmp
 powershell -ExecutionPolicy Bypass -File $tmp -Scope ui
-```
-
-### Windows（PowerShell，非交互传入 baseUrl/apiKey）
-
-```powershell
-$tmp = Join-Path $env:TEMP "install-custom.ps1"
-iwr -useb https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts/install-custom.ps1 -OutFile $tmp
-powershell -ExecutionPolicy Bypass -File $tmp -BaseUrl "https://your-base-url" -ApiKey "your-api-key"
 ```
 
 安装脚本会自动完成：
