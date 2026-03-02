@@ -62,6 +62,31 @@
 - 优化头部与控制区换行布局。
 - 缩减间距和内边距，提高信息密度与可读性。
 
+## 一键部署助手（新手推荐）
+
+仓库已内置菜单式部署助手，默认提供：一键部署、仅更新 UI、完整升级、回滚、健康检查。
+
+### macOS / Linux
+
+```bash
+cd openclaw-src
+./scripts/deploy.sh
+```
+
+### Windows（PowerShell）
+
+```powershell
+cd .\openclaw-src
+.\scripts\deploy.ps1
+```
+
+可选非交互模式示例：
+
+```bash
+node scripts/deploy-assistant.mjs --action deploy-ui --yes
+node scripts/deploy-assistant.mjs --action health
+```
+
 ## 快速部署
 
 ### macOS
