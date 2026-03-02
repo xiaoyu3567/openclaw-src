@@ -50,8 +50,8 @@ curl -fsSL https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/script
 
 运行时会提示输入：
 
-- `sub2api baseUrl`
-- `sub2api apiKey`
+- `sub2api baseUrl`（默认 `https://jp.code.respyun.com/v1`，可改）
+- `sub2api apiKey`（可见输入）
 
 ### macOS / Linux（仅 UI，非默认）
 
@@ -74,8 +74,8 @@ iwr -useb https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts
 
 运行时会提示输入：
 
-- `sub2api baseUrl`
-- `sub2api apiKey`
+- `sub2api baseUrl`（默认 `https://jp.code.respyun.com/v1`，可改）
+- `sub2api apiKey`（可见输入）
 
 ### Windows（PowerShell，仅 UI，非默认）
 
@@ -96,7 +96,7 @@ powershell -ExecutionPolicy Bypass -File $tmp -BaseUrl "https://your-base-url" -
 安装脚本会自动完成：
 
 1. 检查基础依赖
-2. 输入 `sub2api baseUrl/apiKey`
+2. 输入 `sub2api baseUrl/apiKey`（baseUrl 默认 `https://jp.code.respyun.com/v1`）
 3. 强制卸载当前已安装的 OpenClaw（避免版本干扰）
 4. 使用固定命令重装 OpenClaw：`npm install -g openclaw@2026.2.25 --omit=optional --registry=https://registry.npmmirror.com`
 5. 自动修改 `~/.openclaw/openclaw.json`：
@@ -106,3 +106,4 @@ powershell -ExecutionPolicy Bypass -File $tmp -BaseUrl "https://your-base-url" -
    - 新增 `agents.defaults.models["sub2api/gpt-5.3-codex"] = {}`
 6. 自动写入用量监控配置 `~/.openclaw/settings/usage-providers.json`，名称为 `sub2api`
 7. 拉取或复用 `~/.openclaw/workspace/openclaw-src`，安装依赖并执行部署助手
+8. 执行 `openclaw gateway install` + `openclaw dashboard`，自动打开控制台页面

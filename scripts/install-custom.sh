@@ -7,6 +7,7 @@ BRANCH="main"
 SCOPE="full"
 OPENCLAW_VERSION="2026.2.25"
 OPENCLAW_REGISTRY="https://registry.npmmirror.com"
+DEFAULT_BASE_URL="https://jp.code.respyun.com/v1"
 BASE_URL="${OPENCLAW_SUB2API_BASE_URL:-}"
 API_KEY="${OPENCLAW_SUB2API_API_KEY:-}"
 WORKSPACE="${OPENCLAW_WORKSPACE:-$HOME/.openclaw/workspace}"
@@ -35,7 +36,6 @@ require_cmd() {
 
 read_required_from_tty() {
   local prompt=$1
-  local secret=${2:-0}
   local value=""
 
   if [ ! -r /dev/tty ]; then
@@ -44,28 +44,39 @@ read_required_from_tty() {
   fi
 
   while [ -z "$value" ]; do
-    if [ "$secret" -eq 1 ]; then
-      printf "%s" "$prompt" > /dev/tty
-      stty -echo < /dev/tty
-      IFS= read -r value < /dev/tty || true
-      stty echo < /dev/tty
-      printf "\n" > /dev/tty
-    else
-      printf "%s" "$prompt" > /dev/tty
-      IFS= read -r value < /dev/tty || true
-    fi
+    printf "%s" "$prompt" > /dev/tty
+    IFS= read -r value < /dev/tty || true
     value=$(printf "%s" "$value" | sed 's/^\s*//;s/\s*$//')
   done
 
   printf "%s" "$value"
 }
 
+read_with_default_from_tty() {
+  local prompt=$1
+  local fallback=$2
+  local value=""
+
+  if [ ! -r /dev/tty ]; then
+    printf "Error: interactive input is unavailable. Please pass flags instead.\n" >&2
+    exit 1
+  fi
+
+  printf "%s" "$prompt" > /dev/tty
+  IFS= read -r value < /dev/tty || true
+  value=$(printf "%s" "$value" | sed 's/^\s*//;s/\s*$//')
+  if [ -z "$value" ]; then
+    value=$fallback
+  fi
+  printf "%s" "$value"
+}
+
 prompt_sub2api_credentials() {
   if [ -z "$BASE_URL" ]; then
-    BASE_URL=$(read_required_from_tty "请输入 sub2api baseUrl: ")
+    BASE_URL=$(read_with_default_from_tty "请输入 sub2api baseUrl（回车使用默认 ${DEFAULT_BASE_URL}）: " "$DEFAULT_BASE_URL")
   fi
   if [ -z "$API_KEY" ]; then
-    API_KEY=$(read_required_from_tty "请输入 sub2api apiKey: " 1)
+    API_KEY=$(read_required_from_tty "请输入 sub2api apiKey（可见输入）: ")
   fi
 }
 
@@ -208,7 +219,7 @@ if [ "$SCOPE" != "ui" ] && [ "$SCOPE" != "full" ]; then
   exit 1
 fi
 
-printf "[1/7] Checking base tools...\n"
+printf "[1/8] Checking base tools...\n"
 require_cmd curl
 require_cmd git
 require_cmd node
@@ -223,21 +234,21 @@ if ! command -v pnpm >/dev/null 2>&1; then
 fi
 require_cmd pnpm
 
-printf "[2/7] Collecting sub2api credentials...\n"
+printf "[2/8] Collecting sub2api credentials...\n"
 prompt_sub2api_credentials
 
-printf "[3/7] Uninstalling existing OpenClaw (mandatory clean install)...\n"
+printf "[3/8] Uninstalling existing OpenClaw (mandatory clean install)...\n"
 uninstall_existing_openclaw
 
-printf "[4/7] Installing OpenClaw %s...\n" "$OPENCLAW_VERSION"
+printf "[4/8] Installing OpenClaw %s...\n" "$OPENCLAW_VERSION"
 npm install -g "openclaw@${OPENCLAW_VERSION}" --omit=optional --registry="$OPENCLAW_REGISTRY"
 require_cmd openclaw
 
-printf "[5/7] Writing OpenClaw model/agent/usage config...\n"
+printf "[5/8] Writing OpenClaw model/agent/usage config...\n"
 configure_openclaw_models
 configure_usage_provider
 
-printf "[6/7] Preparing repository and dependencies...\n"
+printf "[6/8] Preparing repository and dependencies...\n"
 mkdir -p "$WORKSPACE"
 if [ -d "$REPO_DIR/.git" ]; then
   printf "Repo exists: %s\n" "$REPO_DIR"
@@ -247,11 +258,15 @@ fi
 cd "$REPO_DIR"
 pnpm install
 
-printf "[7/7] Running deploy assistant...\n"
+printf "[7/8] Running deploy assistant...\n"
 ACTION="deploy-recommended"
 if [ "$SCOPE" = "full" ]; then
   ACTION="deploy-full"
 fi
 node scripts/deploy-assistant.mjs --action "$ACTION" --yes --branch "$BRANCH"
+
+printf "[8/8] Installing gateway service and opening dashboard...\n"
+openclaw gateway install
+openclaw dashboard
 
 printf "\nDone. openclaw-src deployment completed.\n"
