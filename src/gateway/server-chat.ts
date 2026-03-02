@@ -5,6 +5,11 @@ import { loadConfig } from "../config/config.js";
 import { type AgentEventPayload, getAgentRunContext } from "../infra/agent-events.js";
 import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
 import { stripInlineDirectiveTagsForDisplay } from "../utils/directive-tags.js";
+import {
+  markChatRunProgress,
+  type ChatAbortControllerEntry,
+  type ChatRunProgressKind,
+} from "./chat-abort.js";
 import { loadSessionEntry } from "./session-utils.js";
 import { formatForLog } from "./ws-log.js";
 
@@ -262,6 +267,7 @@ export type AgentEventHandlerOptions = {
   nodeSendToSession: NodeSendToSession;
   agentRunSeq: Map<string, number>;
   chatRunState: ChatRunState;
+  chatAbortControllers: Map<string, ChatAbortControllerEntry>;
   resolveSessionKeyForRun: (runId: string) => string | undefined;
   clearAgentRunContext: (runId: string) => void;
   toolEventRecipients: ToolEventRecipientRegistry;
@@ -273,6 +279,7 @@ export function createAgentEventHandler({
   nodeSendToSession,
   agentRunSeq,
   chatRunState,
+  chatAbortControllers,
   resolveSessionKeyForRun,
   clearAgentRunContext,
   toolEventRecipients,
@@ -367,6 +374,31 @@ export function createAgentEventHandler({
     nodeSendToSession(sessionKey, "chat", payload);
   };
 
+  const resolveProgressKind = (params: {
+    evt: AgentEventPayload;
+    lifecyclePhase: string | null;
+  }): ChatRunProgressKind | null => {
+    if (params.evt.stream === "tool") {
+      return "tool";
+    }
+    if (
+      params.evt.stream === "assistant" &&
+      typeof params.evt.data?.text === "string" &&
+      params.evt.data.text.trim()
+    ) {
+      return "assistant";
+    }
+    if (
+      params.evt.stream === "lifecycle" &&
+      params.lifecyclePhase &&
+      params.lifecyclePhase !== "end" &&
+      params.lifecyclePhase !== "error"
+    ) {
+      return "lifecycle";
+    }
+    return null;
+  };
+
   const resolveToolVerboseLevel = (runId: string, sessionKey?: string) => {
     const runContext = getAgentRunContext(runId);
     const runVerbose = normalizeVerboseLevel(runContext?.verboseLevel);
@@ -446,6 +478,12 @@ export function createAgentEventHandler({
 
     const lifecyclePhase =
       evt.stream === "lifecycle" && typeof evt.data?.phase === "string" ? evt.data.phase : null;
+    if (!isAborted) {
+      const progressKind = resolveProgressKind({ evt, lifecyclePhase });
+      if (progressKind) {
+        markChatRunProgress(chatAbortControllers, clientRunId, { kind: progressKind });
+      }
+    }
 
     if (sessionKey) {
       // Send tool events to node/channel subscribers only when verbose is enabled;

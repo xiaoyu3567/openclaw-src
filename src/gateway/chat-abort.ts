@@ -1,11 +1,16 @@
 import { isAbortRequestText } from "../auto-reply/reply/abort.js";
 
+export type ChatRunProgressKind = "assistant" | "tool" | "lifecycle" | "other";
+
 export type ChatAbortControllerEntry = {
   controller: AbortController;
   sessionId: string;
   sessionKey: string;
   startedAtMs: number;
   expiresAtMs: number;
+  firstProgressAtMs?: number;
+  lastProgressAtMs?: number;
+  lastProgressKind?: ChatRunProgressKind;
 };
 
 export function isChatStopCommandText(text: string): boolean {
@@ -25,6 +30,23 @@ export function resolveChatRunExpiresAtMs(params: {
   const min = now + minMs;
   const max = now + maxMs;
   return Math.min(max, Math.max(min, target));
+}
+
+export function markChatRunProgress(
+  chatAbortControllers: Map<string, ChatAbortControllerEntry>,
+  runId: string,
+  params?: { now?: number; kind?: ChatRunProgressKind },
+): void {
+  const entry = chatAbortControllers.get(runId);
+  if (!entry) {
+    return;
+  }
+  const now = typeof params?.now === "number" ? params.now : Date.now();
+  if (entry.firstProgressAtMs === undefined) {
+    entry.firstProgressAtMs = now;
+  }
+  entry.lastProgressAtMs = now;
+  entry.lastProgressKind = params?.kind ?? "other";
 }
 
 export type ChatAbortOps = {

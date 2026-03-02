@@ -34,6 +34,7 @@ import {
   validateSessionsResetParams,
   validateSessionsResolveParams,
 } from "../protocol/index.js";
+import { mergeSessionThinkingView } from "../session-thinking-view.js";
 import {
   archiveFileOnDisk,
   archiveSessionTranscripts,
@@ -281,7 +282,7 @@ async function closeAcpRuntimeForSession(params: {
 }
 
 export const sessionsHandlers: GatewayRequestHandlers = {
-  "sessions.list": ({ params, respond }) => {
+  "sessions.list": ({ params, respond, context }) => {
     if (!assertValidParams(params, validateSessionsListParams, "sessions.list", respond)) {
       return;
     }
@@ -294,7 +295,19 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       store,
       opts: p,
     });
-    respond(true, result, undefined);
+    const sessions = mergeSessionThinkingView(
+      result.sessions,
+      context.chatAbortControllers,
+      result.ts,
+    );
+    respond(
+      true,
+      {
+        ...result,
+        sessions,
+      },
+      undefined,
+    );
   },
   "sessions.preview": ({ params, respond }) => {
     if (!assertValidParams(params, validateSessionsPreviewParams, "sessions.preview", respond)) {

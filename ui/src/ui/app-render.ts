@@ -132,8 +132,12 @@ function formatTopbarThinkingElapsed(ms: number): string {
   return `${hours}:${minutes}:${seconds}`;
 }
 
+function resolveTopbarSessionEntry(state: AppViewState) {
+  return state.sessionsResult?.sessions.find((row) => row.key === state.sessionKey);
+}
+
 function resolveTopbarThinkingStartedAt(state: AppViewState): number | null {
-  const sessionEntry = state.sessionsResult?.sessions.find((row) => row.key === state.sessionKey);
+  const sessionEntry = resolveTopbarSessionEntry(state);
   if (typeof sessionEntry?.thinkingStartedAt === "number") {
     return sessionEntry.thinkingStartedAt;
   }
@@ -143,17 +147,59 @@ function resolveTopbarThinkingStartedAt(state: AppViewState): number | null {
   return null;
 }
 
+function resolveTopbarThinkingState(
+  state: AppViewState,
+): "idle" | "thinking" | "suspect" | "stalled" {
+  const gatewayState = resolveTopbarSessionEntry(state)?.thinkingState;
+  if (
+    gatewayState === "idle" ||
+    gatewayState === "thinking" ||
+    gatewayState === "suspect" ||
+    gatewayState === "stalled"
+  ) {
+    return gatewayState;
+  }
+  return resolveTopbarThinkingStartedAt(state) == null ? "idle" : "thinking";
+}
+
 function resolveTopbarThinkingLabel(state: AppViewState): string {
+  const thinkingState = resolveTopbarThinkingState(state);
+  const sessionEntry = resolveTopbarSessionEntry(state);
   const startedAt = resolveTopbarThinkingStartedAt(state);
-  if (typeof startedAt !== "number") {
+  const now = typeof state.sessionStatusNow === "number" ? state.sessionStatusNow : Date.now();
+  if (thinkingState === "idle") {
     return "idle";
   }
-  const now = typeof state.sessionStatusNow === "number" ? state.sessionStatusNow : Date.now();
-  return `thinking: ${formatTopbarThinkingElapsed(now - startedAt)}`;
+  if (thinkingState === "stalled") {
+    if (typeof startedAt === "number") {
+      return `stalled: ${formatTopbarThinkingElapsed(now - startedAt)}`;
+    }
+    return "stalled: recovering";
+  }
+  if (thinkingState === "suspect") {
+    if (typeof sessionEntry?.thinkingSilenceMs === "number") {
+      return `suspect: ${formatTopbarThinkingElapsed(sessionEntry.thinkingSilenceMs)}`;
+    }
+    if (typeof startedAt === "number") {
+      return `suspect: ${formatTopbarThinkingElapsed(now - startedAt)}`;
+    }
+    return "suspect: no progress";
+  }
+  if (typeof startedAt === "number") {
+    return `thinking: ${formatTopbarThinkingElapsed(now - startedAt)}`;
+  }
+  return "thinking";
 }
 
 function resolveTopbarThinkingClass(state: AppViewState): string {
-  return resolveTopbarThinkingStartedAt(state) == null ? "ok" : "warn";
+  const thinkingState = resolveTopbarThinkingState(state);
+  if (thinkingState === "idle") {
+    return "ok";
+  }
+  if (thinkingState === "stalled") {
+    return "";
+  }
+  return "warn";
 }
 
 function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {

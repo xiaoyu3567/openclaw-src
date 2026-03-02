@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { CURRENT_SESSION_VERSION } from "@mariozechner/pi-coding-agent";
@@ -9,11 +8,7 @@ import { dispatchInboundMessage } from "../../auto-reply/dispatch.js";
 import { createReplyDispatcher } from "../../auto-reply/reply/reply-dispatcher.js";
 import type { MsgContext } from "../../auto-reply/templating.js";
 import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
-import {
-  resolveSessionFilePath,
-  type SessionEntry,
-  updateSessionStore,
-} from "../../config/sessions.js";
+import { resolveSessionFilePath } from "../../config/sessions.js";
 import { resolveSendPolicy } from "../../sessions/send-policy.js";
 import {
   stripInlineDirectiveTagsForDisplay,
@@ -41,6 +36,7 @@ import {
   validateChatSendParams,
 } from "../protocol/index.js";
 import { getMaxChatHistoryMessagesBytes } from "../server-constants.js";
+import { updateSessionThinkingState } from "../session-thinking-state.js";
 import {
   capArrayByJsonBytes,
   loadSessionEntry,
@@ -73,97 +69,6 @@ const CHAT_HISTORY_TEXT_MAX_CHARS = 12_000;
 const CHAT_HISTORY_MAX_SINGLE_MESSAGE_BYTES = 128 * 1024;
 const CHAT_HISTORY_OVERSIZED_PLACEHOLDER = "[chat.history omitted: message too large]";
 let chatHistoryPlaceholderEmitCount = 0;
-
-type SessionThinkingStateParams = {
-  storePath: string;
-  candidateKeys: string[];
-  runId: string;
-  startedAt?: number;
-  clear: boolean;
-};
-
-function resolveStoreKeyForThinkingState(
-  store: Record<string, SessionEntry>,
-  params: SessionThinkingStateParams,
-): string | null {
-  for (const candidate of params.candidateKeys) {
-    const key = candidate.trim();
-    if (key && store[key]) {
-      return key;
-    }
-  }
-  const lowered = new Set(
-    params.candidateKeys.map((candidate) => candidate.trim().toLowerCase()).filter(Boolean),
-  );
-  for (const key of Object.keys(store)) {
-    if (lowered.has(key.toLowerCase())) {
-      return key;
-    }
-  }
-  return null;
-}
-
-function resolveCreateKeyForThinkingState(params: SessionThinkingStateParams): string | null {
-  for (const candidate of params.candidateKeys) {
-    const key = candidate.trim();
-    if (key) {
-      return key;
-    }
-  }
-  return null;
-}
-
-async function updateSessionThinkingState(params: SessionThinkingStateParams): Promise<void> {
-  await updateSessionStore(params.storePath, (store) => {
-    const storeKey = resolveStoreKeyForThinkingState(store, params);
-    if (!storeKey) {
-      if (params.clear || typeof params.startedAt !== "number") {
-        return;
-      }
-      const createKey = resolveCreateKeyForThinkingState(params);
-      if (!createKey) {
-        return;
-      }
-      store[createKey] = {
-        sessionId: randomUUID(),
-        updatedAt: params.startedAt,
-        thinkingStartedAt: params.startedAt,
-        thinkingRunId: params.runId,
-      };
-      return;
-    }
-    const entry = store[storeKey];
-    if (!entry) {
-      return;
-    }
-
-    if (params.clear) {
-      if (entry.thinkingRunId && entry.thinkingRunId !== params.runId) {
-        return;
-      }
-      if (entry.thinkingStartedAt === undefined && entry.thinkingRunId === undefined) {
-        return;
-      }
-      const next: SessionEntry = { ...entry };
-      delete next.thinkingStartedAt;
-      delete next.thinkingRunId;
-      store[storeKey] = next;
-      return;
-    }
-
-    if (typeof params.startedAt !== "number") {
-      return;
-    }
-    if (entry.thinkingStartedAt === params.startedAt && entry.thinkingRunId === params.runId) {
-      return;
-    }
-    store[storeKey] = {
-      ...entry,
-      thinkingStartedAt: params.startedAt,
-      thinkingRunId: params.runId,
-    };
-  });
-}
 
 function stripDisallowedChatControlChars(message: string): string {
   let output = "";

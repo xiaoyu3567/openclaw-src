@@ -2,15 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../config/config.js";
 import { registerAgentRunContext, resetAgentRunContextForTest } from "../infra/agent-events.js";
 import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
+import type { ChatAbortControllerEntry } from "./chat-abort.js";
 import {
   createAgentEventHandler,
   createChatRunState,
   createToolEventRecipientRegistry,
 } from "./server-chat.js";
 
-vi.mock("../config/config.js", () => ({
-  loadConfig: vi.fn(() => ({})),
-}));
+vi.mock("../config/config.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../config/config.js")>();
+  return {
+    ...actual,
+    loadConfig: vi.fn(() => ({})),
+  };
+});
 
 vi.mock("../infra/heartbeat-visibility.js", () => ({
   resolveHeartbeatVisibility: vi.fn(() => ({
@@ -46,6 +51,7 @@ describe("agent event handler", () => {
     const nodeSendToSession = vi.fn();
     const agentRunSeq = new Map<string, number>();
     const chatRunState = createChatRunState();
+    const chatAbortControllers = new Map<string, ChatAbortControllerEntry>();
     const toolEventRecipients = createToolEventRecipientRegistry();
 
     const handler = createAgentEventHandler({
@@ -54,6 +60,7 @@ describe("agent event handler", () => {
       nodeSendToSession,
       agentRunSeq,
       chatRunState,
+      chatAbortControllers,
       resolveSessionKeyForRun: params?.resolveSessionKeyForRun ?? (() => undefined),
       clearAgentRunContext: vi.fn(),
       toolEventRecipients,
@@ -66,6 +73,7 @@ describe("agent event handler", () => {
       nodeSendToSession,
       agentRunSeq,
       chatRunState,
+      chatAbortControllers,
       toolEventRecipients,
       handler,
     };

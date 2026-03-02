@@ -27,6 +27,9 @@ export type GatewaySessionRow = {
   abortedLastRun?: boolean;
   thinkingStartedAt?: number;
   thinkingRunId?: string;
+  thinkingState?: "idle" | "thinking" | "suspect" | "stalled";
+  thinkingLastProgressAt?: number;
+  thinkingSilenceMs?: number;
   thinkingLevel?: string;
   verboseLevel?: string;
   reasoningLevel?: string;

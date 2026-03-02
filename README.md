@@ -17,11 +17,14 @@
   - `Ctrl/Cmd+Enter` 才发送消息。
   - 移除输入框内 `New session` 按钮，减少误触。
 
-- 后端每会话思考计时（per-session）
+- 后端每会话思考计时与自愈（per-session + liveness）
   - 新增持久化字段：`thinkingStartedAt`、`thinkingRunId`。
-  - `sessions.list` 返回会话思考状态。
-  - 顶部状态显示 `idle` 或 `thinking: HH:MM:SS`。
-  - 切会话、刷新页面后计时状态可延续。
+  - `sessions.list` 增强返回：`thinkingState`、`thinkingLastProgressAt`、`thinkingSilenceMs`。
+  - 顶部状态从二值扩展为：`idle` / `thinking` / `suspect` / `stalled`。
+  - 引入 progress-based liveness 判定：区分“长任务”与“疑似无响应”。
+  - maintenance 自动回收 stalled/timeout run，减少僵尸 thinking 状态。
+  - gateway restart 后自动做 orphan thinking marker reconcile，避免无限计时。
+  - 切会话、刷新页面后计时状态可延续（并在异常场景自动收敛）。
 
 - 移动端 UI 修正
   - 修复移动端聊天控制区可见性与可操作性问题。

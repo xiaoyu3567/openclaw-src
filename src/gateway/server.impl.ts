@@ -99,6 +99,7 @@ import {
   refreshGatewayHealthSnapshot,
 } from "./server/health-state.js";
 import { loadGatewayTlsRuntime } from "./server/tls.js";
+import { reconcileOrphanedSessionThinkingStates } from "./session-thinking-state.js";
 import { ensureGatewayStartupAuth } from "./startup-auth.js";
 
 export { __resetModelCatalogCacheForTest } from "./server-model-catalog.js";
@@ -615,6 +616,26 @@ export async function startGatewayServer(
       agentRunSeq,
       nodeSendToSession,
     }));
+
+    const startupOrphanReconcileDelayMs = 5_000;
+    const startupStartedAtMs = Date.now();
+    setTimeout(() => {
+      void reconcileOrphanedSessionThinkingStates({
+        cfg: loadConfig(),
+        activeRunIds: new Set(chatAbortControllers.keys()),
+        minStartedAtMs: startupStartedAtMs,
+      })
+        .then((result) => {
+          if (result.cleared > 0) {
+            log.debug(
+              `thinking marker reconciliation cleared=${result.cleared} scanned=${result.scanned}`,
+            );
+          }
+        })
+        .catch((err) => {
+          log.warn(`thinking marker reconciliation failed: ${String(err)}`);
+        });
+    }, startupOrphanReconcileDelayMs);
   }
 
   const agentUnsub = minimalTestGateway
@@ -626,6 +647,7 @@ export async function startGatewayServer(
           nodeSendToSession,
           agentRunSeq,
           chatRunState,
+          chatAbortControllers,
           resolveSessionKeyForRun,
           clearAgentRunContext,
           toolEventRecipients,

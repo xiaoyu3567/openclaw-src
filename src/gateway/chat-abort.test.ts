@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   abortChatRunById,
   isChatStopCommandText,
+  markChatRunProgress,
   type ChatAbortOps,
   type ChatAbortControllerEntry,
 } from "./chat-abort.js";
@@ -58,6 +59,21 @@ describe("isChatStopCommandText", () => {
     expect(isChatStopCommandText("/status")).toBe(false);
     expect(isChatStopCommandText("please do not do that")).toBe(false);
     expect(isChatStopCommandText("keep going")).toBe(false);
+  });
+});
+
+describe("markChatRunProgress", () => {
+  it("stores first progress timestamp once and updates latest progress metadata", () => {
+    const runId = "run-progress";
+    const entry = createActiveEntry("main");
+    const controllers = new Map([[runId, entry]]);
+
+    markChatRunProgress(controllers, runId, { now: 1_000, kind: "assistant" });
+    markChatRunProgress(controllers, runId, { now: 1_500, kind: "tool" });
+
+    expect(entry.firstProgressAtMs).toBe(1_000);
+    expect(entry.lastProgressAtMs).toBe(1_500);
+    expect(entry.lastProgressKind).toBe("tool");
   });
 });
 
