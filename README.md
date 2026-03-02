@@ -1,124 +1,122 @@
-# openclaw-src（基于 OpenClaw 的定制版本）
+# openclaw-src
 
-本仓库基于 OpenClaw 进行定制，目标是提升日常使用中的会话管理效率、输入体验和可观测性。
+A practical, production-focused fork of OpenClaw.
 
-## 功能改进（相对 OpenClaw）
+> Built for smoother daily workflows: better session control, clearer thinking status, and safer recovery when runs get stuck.
 
-- 会话管理增强（Control UI）
-  - 顶部增加会话创建（`+`）、删除（trash）、刷新按钮。
-  - 创建支持完整 key、短后缀（`agent:main:xxx`）、随机后缀，并自动切换到新会话。
-  - 删除支持按序号、完整 key、短尾 key 匹配。
-  - 删除失败不再静默，统一显示明确错误信息。
-  - Chat 会话下拉框改为显示 all sessions（不再仅展示 recent-only 会话）。
-  - 侧边栏点击 Chat 时默认保留当前会话；仅在当前会话不存在时回退到 main。
+## Why this fork?
 
-- 输入体验优化
-  - `Enter` 改为换行。
-  - `Ctrl/Cmd+Enter` 才发送消息。
-  - 移除输入框内 `New session` 按钮，减少误触。
+This repo keeps the OpenClaw core experience, but improves the parts that matter most in real usage:
 
-- 后端每会话思考计时与自愈（per-session + liveness）
-  - 新增持久化字段：`thinkingStartedAt`、`thinkingRunId`。
-  - `sessions.list` 增强返回：`thinkingState`、`thinkingLastProgressAt`、`thinkingSilenceMs`。
-  - 顶部状态从二值扩展为：`idle` / `thinking` / `suspect` / `stalled`。
-  - 引入 progress-based liveness 判定：区分“长任务”与“疑似无响应”。
-  - maintenance 自动回收 stalled/timeout run，减少僵尸 thinking 状态。
-  - gateway restart 后自动做 orphan thinking marker reconcile，避免无限计时。
-  - 切会话、刷新页面后计时状态可延续（并在异常场景自动收敛）。
+- faster multi-session operations
+- better observability for agent thinking state
+- stronger self-healing after gateway restart or stalled runs
+- cleaner usage dashboard and mobile UX
 
-- 移动端 UI 修正
-  - 修复移动端聊天控制区可见性与可操作性问题。
-  - 优化头部与控制区换行布局。
-  - 压缩移动端间距与内边距，提升可读性与操作密度。
+## Highlights
 
-- Provider 余量/用量面板
-  - 在 Usage 页增加 Provider 用量卡片。
-  - 支持多 Provider 配置（名称、Base URL、API Key、刷新间隔、超时）。
-  - 展示余量、周期用量、RPM/TPM、延迟、最后刷新时间。
-  - 默认折叠“今日用量”“累计用量”详情，减少首屏信息噪音。
-  - 支持展开原始 JSON 便于排障。
-  - 新增跨浏览器配置同步 MVP：
-    - Provider 配置持久化到 Gateway：`~/.openclaw/settings/usage-providers.json`（权限 `600`）。
-    - 新增 RPC：`usage.provider.config.list`、`usage.provider.config.upsert`、`usage.provider.config.delete`。
-    - 首次进入 Usage 页时，若服务端为空且本地有旧配置，自动执行一次 localStorage → Gateway 迁移。
-    - 同步刷新策略：进入 Usage 页、窗口 focus、每 30 秒轮询拉取配置。
+### 1) Better Session Management (Control UI)
 
-## 部署（macOS）
+- Topbar actions: create (`+`), delete (trash), refresh.
+- Flexible session creation:
+  - full key
+  - short suffix (auto expands to `agent:main:xxx`)
+  - random suffix
+- Flexible deletion:
+  - by index
+  - by full key
+  - by key tail
+- Chat session dropdown now shows all sessions (not recent-only).
+- Returning to Chat keeps your current session whenever possible.
 
-### 1) 安装 OpenClaw
+### 2) Per-Session Thinking + Liveness Recovery
+
+- Persistent thinking markers per session:
+  - `thinkingStartedAt`
+  - `thinkingRunId`
+- Thinking state is now explicit:
+  - `idle`
+  - `thinking`
+  - `suspect` (likely no progress)
+  - `stalled` (stuck/recovering)
+- Progress-based liveness detection helps distinguish long tasks vs unresponsive runs.
+- Maintenance loop auto-reclaims stalled/timeout runs.
+- Startup reconcile clears orphan thinking markers after gateway restart.
+
+### 3) Input UX for Real Work
+
+- `Enter` = newline
+- `Ctrl/Cmd + Enter` = send
+- Removed inline `New session` button in composer to reduce accidental clicks
+
+### 4) Usage Page Improvements
+
+- Provider usage cards with multi-provider config support.
+- Shows balance/quota, period usage, RPM/TPM, latency, refresh time.
+- "Today" and "Total" sections are collapsed by default for cleaner first screen.
+- Raw JSON view available for troubleshooting.
+
+### 5) Mobile Usability Fixes
+
+- Chat controls are visible and reliably operable on mobile.
+- Better wrapping/layout in topbar and controls.
+- Tighter spacing for better readability and interaction density.
+
+## Quick Deploy
+
+### macOS
 
 ```bash
+# 1) Install OpenClaw
 npm install -g openclaw@2026.2.25 --omit=optional --registry=https://registry.npmmirror.com
-```
 
-### 2) 初始化配置
-
-```bash
+# 2) Onboard
 openclaw onboard --install-daemon
-```
 
-### 3) 拉取源码并构建 UI
-
-```bash
+# 3) Clone + build UI
 cd ~/.openclaw/workspace
 git clone https://github.com/xiaoyu3567/openclaw-src openclaw-src
 cd openclaw-src
 pnpm install
 pnpm ui:build
-```
 
-### 4) 验证与覆盖 UI 产物
-
-```bash
-which openclaw
-openclaw gateway status
-
-# 只覆盖 web UI 产物，不动整个 dist
+# 4) Replace web UI assets + restart gateway
 rsync -a --delete dist/control-ui/ /opt/homebrew/lib/node_modules/openclaw/dist/control-ui/
-
 openclaw gateway restart
 openclaw gateway status
 ```
 
-## 部署（Windows，PowerShell）
-
-### 1) 安装 OpenClaw
+### Windows (PowerShell)
 
 ```powershell
+# 1) Install OpenClaw
 npm install -g openclaw@2026.2.25 --omit=optional --registry=https://registry.npmmirror.com
-```
 
-### 2) 初始化配置
-
-```powershell
+# 2) Onboard
 openclaw onboard --install-daemon
-```
 
-### 3) 拉取源码并构建 UI
-
-```powershell
+# 3) Clone + build UI
 cd $HOME\.openclaw\workspace
 git clone https://github.com/xiaoyu3567/openclaw-src openclaw-src
 cd .\openclaw-src
 pnpm install
 pnpm ui:build
-```
 
-### 4) 验证与覆盖 UI 产物
-
-```powershell
-where openclaw
-openclaw gateway status
-
-# 只覆盖 web UI 产物，不动整个 dist
+# 4) Replace web UI assets + restart gateway
 $openclawRoot = Join-Path $env:APPDATA "npm\node_modules\openclaw\dist\control-ui"
 robocopy ".\dist\control-ui" $openclawRoot /MIR
-
 openclaw gateway restart
 openclaw gateway status
 ```
 
-## 说明
+## 30-Second Post-Upgrade Check
 
-- 本 README 聚焦“功能差异”和“部署步骤”，不展开通用 OpenClaw 文档内容。
-- 如需回溯定制细节，请查看对应 commit 历史与 `ui/src/ui`、`src/gateway` 下变更。
+- Open Chat and confirm session dropdown includes all expected sessions.
+- Send one message and verify topbar thinking state transitions correctly.
+- Restart gateway once and ensure thinking does not stay stuck forever.
+- Open Usage page and confirm Today/Total sections default to collapsed.
+
+## Notes
+
+- This README focuses on practical differences and fast onboarding.
+- For implementation details, check commit history and changes under `src/gateway` and `ui/src/ui`.
