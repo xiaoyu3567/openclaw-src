@@ -33,6 +33,8 @@
 
 不需要手动 clone。直接运行：
 
+> 注意：安装脚本会先强制卸载当前 OpenClaw，再重新安装，确保环境干净无版本干扰。
+
 ### macOS / Linux（推荐）
 
 ```bash
@@ -61,6 +63,8 @@ powershell -ExecutionPolicy Bypass -File $tmp -Scope full
 
 安装脚本会自动完成：
 
-1. 检查并安装基础依赖（含 OpenClaw）
-2. 拉取或复用 `~/.openclaw/workspace/openclaw-src`
-3. 安装依赖并执行部署助手（推荐模式）
+1. 检查基础依赖
+2. 强制卸载当前已安装的 OpenClaw（避免版本干扰）
+3. 重新安装 OpenClaw
+4. 拉取或复用 `~/.openclaw/workspace/openclaw-src`
+5. 安装依赖并执行部署助手（推荐模式）
