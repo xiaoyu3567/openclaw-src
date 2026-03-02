@@ -65,6 +65,6 @@ powershell -ExecutionPolicy Bypass -File $tmp -Scope full
 
 1. 检查基础依赖
 2. 强制卸载当前已安装的 OpenClaw（避免版本干扰）
-3. 重新安装 OpenClaw
+3. 使用固定命令重装 OpenClaw：`npm install -g openclaw@2026.2.25 --omit=optional --registry=https://registry.npmmirror.com`
 4. 拉取或复用 `~/.openclaw/workspace/openclaw-src`
 5. 安装依赖并执行部署助手（推荐模式）

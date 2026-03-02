@@ -6,6 +6,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$OpenClawVersion = "2026.2.25"
+$OpenClawRegistry = "https://registry.npmmirror.com"
 
 function Require-Command([string]$Name) {
   if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
@@ -73,8 +75,8 @@ Require-Command "pnpm"
 Write-Host "[2/6] Uninstalling existing OpenClaw (mandatory clean install)..."
 Uninstall-ExistingOpenClaw
 
-Write-Host "[3/6] Installing OpenClaw..."
-npm install -g openclaw@latest --omit=optional
+Write-Host "[3/6] Installing OpenClaw $OpenClawVersion..."
+npm install -g "openclaw@$OpenClawVersion" --omit=optional --registry="$OpenClawRegistry"
 Require-Command "openclaw"
 
 Write-Host "[4/6] Preparing repository..."

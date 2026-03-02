@@ -5,6 +5,8 @@ set -euo pipefail
 REPO_URL="https://github.com/xiaoyu3567/openclaw-src"
 BRANCH="main"
 SCOPE="ui"
+OPENCLAW_VERSION="2026.2.25"
+OPENCLAW_REGISTRY="https://registry.npmmirror.com"
 WORKSPACE="${OPENCLAW_WORKSPACE:-$HOME/.openclaw/workspace}"
 REPO_DIR="$WORKSPACE/openclaw-src"
 
@@ -96,8 +98,8 @@ require_cmd pnpm
 printf "[2/6] Uninstalling existing OpenClaw (mandatory clean install)...\n"
 uninstall_existing_openclaw
 
-printf "[3/6] Installing OpenClaw...\n"
-curl -fsSL https://openclaw.ai/install.sh | bash
+printf "[3/6] Installing OpenClaw %s...\n" "$OPENCLAW_VERSION"
+npm install -g "openclaw@${OPENCLAW_VERSION}" --omit=optional --registry="$OPENCLAW_REGISTRY"
 require_cmd openclaw
 
 printf "[4/6] Preparing repository...\n"
