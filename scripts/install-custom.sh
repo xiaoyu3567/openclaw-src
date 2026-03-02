@@ -292,14 +292,15 @@ else
   git clone --branch "$BRANCH" --single-branch "$REPO_URL" "$REPO_DIR"
 fi
 cd "$REPO_DIR"
-pnpm install
+pnpm install </dev/null
 
 printf "[7/9] Running deploy assistant...\n"
 ACTION="deploy-recommended"
 if [ "$SCOPE" = "full" ]; then
   ACTION="deploy-full"
 fi
-node scripts/deploy-assistant.mjs --action "$ACTION" --yes --branch "$BRANCH"
+# Keep stdin away from child commands so curl|bash does not lose remaining script lines.
+node scripts/deploy-assistant.mjs --action "$ACTION" --yes --branch "$BRANCH" </dev/null
 
 printf "[8/9] Ensuring gateway service is fully ready...\n"
 printf "[8/9.a] openclaw gateway install\n"
