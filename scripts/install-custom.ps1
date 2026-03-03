@@ -44,18 +44,44 @@ function Prompt-Sub2ApiCredentials {
   }
 }
 
+function Stop-GatewayPort {
+  param([int]$Port = 18789)
+
+  try {
+    $connections = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction Stop
+    $pids = $connections | Select-Object -ExpandProperty OwningProcess -Unique
+    foreach ($pid in $pids) {
+      try {
+        Stop-Process -Id $pid -Force -ErrorAction Stop
+      } catch {
+        # ignore
+      }
+    }
+  } catch {
+    # ignore when cmdlet unavailable or no listeners
+  }
+}
+
 function Uninstall-ExistingOpenClaw {
   $cmd = Get-Command "openclaw" -ErrorAction SilentlyContinue
-  if (-not $cmd) {
-    Write-Host "No existing OpenClaw detected, skip uninstall."
-    return
+  if ($cmd) {
+    Write-Host "Existing OpenClaw detected, uninstalling first..."
+    try {
+      openclaw gateway stop | Out-Null
+    } catch {
+      # ignore
+    }
+  } else {
+    Write-Host "No existing OpenClaw detected, running deep cleanup anyway..."
   }
 
-  Write-Host "Existing OpenClaw detected, uninstalling first..."
-  try {
-    openclaw gateway stop | Out-Null
-  } catch {
-    # ignore
+  Stop-GatewayPort -Port 18789
+  Get-Process | Where-Object { $_.ProcessName -like "*openclaw*" } | ForEach-Object {
+    try {
+      Stop-Process -Id $_.Id -Force -ErrorAction Stop
+    } catch {
+      # ignore
+    }
   }
 
   try {
@@ -80,11 +106,28 @@ function Uninstall-ExistingOpenClaw {
     }
   }
 
+  $workspaceRepo = Join-Path $HOME ".openclaw\workspace\openclaw-src"
+  if (Test-Path $workspaceRepo) {
+    Write-Host "Removing workspace repo: $workspaceRepo"
+    Remove-Item -Path $workspaceRepo -Recurse -Force
+  }
+
   if (Get-Command "openclaw" -ErrorAction SilentlyContinue) {
     throw "OpenClaw is still present after uninstall. Please remove it manually, then rerun the installer."
   }
 
-  Write-Host "OpenClaw uninstall check passed."
+  try {
+    $left = Get-NetTCPConnection -State Listen -LocalPort 18789 -ErrorAction Stop
+    if ($left) {
+      throw "Port 18789 is still occupied after cleanup."
+    }
+  } catch {
+    if ($_.Exception.Message -notmatch "No matching MSFT_NetTCPConnection") {
+      throw
+    }
+  }
+
+  Write-Host "OpenClaw uninstall deep cleanup passed."
 }
 
 function Wait-GatewayStatusReady {

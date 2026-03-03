@@ -80,16 +80,50 @@ prompt_sub2api_credentials() {
   fi
 }
 
-uninstall_existing_openclaw() {
-  if ! command -v openclaw >/dev/null 2>&1; then
-    printf "No existing OpenClaw detected, skip uninstall.\n"
-    return
+kill_gateway_on_port() {
+  local port=${1:-18789}
+  local pids=""
+
+  if command -v lsof >/dev/null 2>&1; then
+    pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
+  elif command -v ss >/dev/null 2>&1; then
+    pids=$(ss -ltnp 2>/dev/null | awk -v p=":$port" '$4 ~ p { if (match($0, /pid=[0-9]+/)) { print substr($0, RSTART+4, RLENGTH-4) } }' | sort -u)
   fi
 
-  printf "Existing OpenClaw detected, uninstalling first...\n"
-  openclaw gateway stop >/dev/null 2>&1 || true
+  if [ -n "$pids" ]; then
+    printf "Found listeners on port %s: %s\n" "$port" "$(printf "%s" "$pids" | tr '\n' ' ')"
+    # shellcheck disable=SC2086
+    kill $pids >/dev/null 2>&1 || true
+    sleep 1
+    # shellcheck disable=SC2086
+    kill -9 $pids >/dev/null 2>&1 || true
+  fi
+}
+
+uninstall_existing_openclaw() {
+  local had_openclaw=0
+  if command -v openclaw >/dev/null 2>&1; then
+    had_openclaw=1
+  fi
+
+  if [ "$had_openclaw" -eq 1 ]; then
+    printf "Existing OpenClaw detected, uninstalling first...\n"
+    openclaw gateway stop >/dev/null 2>&1 || true
+  else
+    printf "No existing OpenClaw detected, running deep cleanup anyway...\n"
+  fi
+
+  kill_gateway_on_port 18789
+  pkill -f "openclaw-gateway" >/dev/null 2>&1 || true
+  pkill -f "openclaw.*gateway --port 18789" >/dev/null 2>&1 || true
+
   npm uninstall -g openclaw >/dev/null 2>&1 || true
   hash -r 2>/dev/null || true
+
+  if [ -d "$REPO_DIR" ]; then
+    printf "Removing workspace repo: %s\n" "$REPO_DIR"
+    rm -rf "$REPO_DIR"
+  fi
 
   if command -v openclaw >/dev/null 2>&1; then
     printf "Error: OpenClaw is still present at %s after uninstall attempt.\n" "$(command -v openclaw)" >&2
@@ -97,7 +131,12 @@ uninstall_existing_openclaw() {
     exit 1
   fi
 
-  printf "OpenClaw uninstall check passed.\n"
+  if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ':18789 '; then
+    printf "Error: port 18789 is still occupied after cleanup.\n" >&2
+    exit 1
+  fi
+
+  printf "OpenClaw uninstall deep cleanup passed.\n"
 }
 
 wait_gateway_status_ready() {
