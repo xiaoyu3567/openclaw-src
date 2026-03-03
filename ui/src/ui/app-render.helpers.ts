@@ -1,4 +1,4 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import { t } from "../i18n/index.ts";
 import { refreshChat } from "./app-chat.ts";
@@ -16,6 +16,7 @@ import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
 import type { ThemeTransitionContext } from "./theme-transition.ts";
 import type { ThemeMode } from "./theme.ts";
 import type { SessionsListResult } from "./types.ts";
+import { renderSessionDialogView } from "./views/session-dialog.ts";
 
 type SessionDefaultsSnapshot = {
   mainSessionKey?: string;
@@ -274,42 +275,13 @@ export function renderChatControls(state: AppViewState) {
       <button
         class="btn btn--sm btn--icon"
         ?disabled=${!state.connected || state.sessionsLoading || state.chatLoading}
-        @click=${async () => {
-          const suggested = `${sessionPrefix}${randomSessionSuffix()}`;
-          const rawInput = window.prompt(
-            `Create a new session.\nPrefix: ${sessionPrefix}\nEnter suffix (xxx) or full key. Leave blank for random suffix.`,
-            "",
-          );
-          if (rawInput == null) {
-            return;
-          }
-          const input = rawInput.trim();
-          const targetKey =
-            input.length === 0
-              ? suggested
-              : input.includes(":")
-                ? input
-                : `${sessionPrefix}${input}`;
-
-          const existing = sessionOptions.find((entry) => entry.key === targetKey);
-          if (existing) {
-            const overwrite = window.confirm(
-              `Session "${targetKey}" already exists. Reset it and switch to it?`,
-            );
-            if (!overwrite) {
-              return;
-            }
-          }
-
-          const createdKey = await createSessionAndRefresh(state, targetKey);
-          if (!createdKey) {
-            window.alert(state.sessionsError ?? `Failed to create session "${targetKey}".`);
-            return;
-          }
-          switchActiveSession(createdKey);
-          window.alert(`Created session "${createdKey}".`);
+        @click=${() => {
+          state.sessionDialogMode = "create";
+          state.sessionDialogInput = "";
+          state.sessionDialogError = null;
+          state.sessionDialogConfirmOverwrite = false;
         }}
-        title="Create session"
+        title="Create or reset session"
       >
         ${addIcon}
       </button>
@@ -321,87 +293,21 @@ export function renderChatControls(state: AppViewState) {
           deletableSessionOptions.length === 0 ||
           state.chatLoading
         }
-        @click=${async () => {
-          const entries = [...deletableSessionOptions];
-          if (entries.length === 0) {
-            window.alert("No deletable sessions available.");
+        @click=${() => {
+          if (deletableSessionOptions.length === 0) {
+            state.sessionDialogMode = "delete";
+            state.sessionDialogInput = "";
+            state.sessionDialogError = "No deletable sessions available.";
+            state.sessionDialogConfirmOverwrite = false;
             return;
           }
-          const optionLines = entries
-            .map((entry, index) => `${index + 1}. ${entry.displayName ?? entry.key} (${entry.key})`)
-            .join("\n");
-          const defaultValue =
-            entries.find((entry) => entry.key === state.sessionKey)?.key ?? entries[0]?.key ?? "";
-          const rawSelection = window.prompt(
-            `Select a session to delete. Enter index, full key, or short key tail:\n\n${optionLines}`,
-            defaultValue,
-          );
-          if (!rawSelection) {
-            return;
-          }
-          const input = rawSelection.trim();
-          if (!input) {
-            return;
-          }
-          const numeric = Number.parseInt(input, 10);
-          if (Number.isInteger(numeric) && numeric >= 1 && numeric <= entries.length) {
-            const selectedByIndex = entries[numeric - 1];
-            const deletedByIndex = await deleteSessionAndRefresh(state, selectedByIndex.key);
-            if (!deletedByIndex) {
-              window.alert(
-                state.sessionsError ?? `Failed to delete session "${selectedByIndex.key}".`,
-              );
-              return;
-            }
-            if (state.sessionKey === selectedByIndex.key) {
-              const fallback = mainSessionKey ?? resolveSidebarChatSessionKey(state);
-              if (fallback && fallback !== selectedByIndex.key) {
-                switchActiveSession(fallback);
-              }
-            }
-            window.alert(
-              `Deleted session "${selectedByIndex.displayName ?? selectedByIndex.key}".`,
-            );
-            return;
-          }
-
-          const normalizedInput = input.toLowerCase();
-          const exactMatch =
-            entries.find((entry) => entry.key === input) ??
-            entries.find((entry) => (entry.displayName ?? "") === input);
-          const suffixMatches = entries.filter((entry) => {
-            const key = entry.key.toLowerCase();
-            const displayName = (entry.displayName ?? "").toLowerCase();
-            return (
-              key === normalizedInput ||
-              key.endsWith(`:${normalizedInput}`) ||
-              displayName === normalizedInput
-            );
-          });
-          const selected = exactMatch ?? (suffixMatches.length === 1 ? suffixMatches[0] : null);
-
-          if (!selected) {
-            if (suffixMatches.length > 1) {
-              const matches = suffixMatches.map((entry) => entry.key).join("\n");
-              window.alert(`Ambiguous session input. Use full key or index:\n\n${matches}`);
-              return;
-            }
-            window.alert("Session not found. Use the index, full key, or unique key tail.");
-            return;
-          }
-
-          const deleted = await deleteSessionAndRefresh(state, selected.key);
-          if (!deleted) {
-            window.alert(state.sessionsError ?? `Failed to delete session "${selected.key}".`);
-            return;
-          }
-          if (state.sessionKey === selected.key) {
-            const fallback = mainSessionKey ?? resolveSidebarChatSessionKey(state);
-            if (fallback && fallback !== selected.key) {
-              switchActiveSession(fallback);
-            }
-          }
-          window.alert(`Deleted session "${selected.displayName ?? selected.key}".`);
+          state.sessionDialogMode = "delete";
+          state.sessionDialogInput =
+            deletableSessionOptions.find((entry) => entry.key === state.sessionKey)?.key ??
+            deletableSessionOptions[0]?.key ??
+            "";
+          state.sessionDialogError = null;
+          state.sessionDialogConfirmOverwrite = false;
         }}
         title="Delete session"
       >
@@ -443,7 +349,178 @@ export function renderChatControls(state: AppViewState) {
         ${focusIcon}
       </button>
     </div>
+    ${
+      state.sessionDialogMode
+        ? renderSessionDialog({
+            state,
+            sessionPrefix,
+            sessionOptions,
+            deletableSessionOptions,
+            switchActiveSession,
+            mainSessionKey,
+          })
+        : nothing
+    }
   `;
+}
+
+function resolveDeleteSessionSelection(
+  entries: Array<{ key: string; displayName?: string }>,
+  input: string,
+): { selectedKey: string | null; error: string | null } {
+  const normalized = input.trim();
+  if (!normalized) {
+    return { selectedKey: null, error: "Session key/index is required." };
+  }
+  const numeric = Number.parseInt(normalized, 10);
+  if (Number.isInteger(numeric) && numeric >= 1 && numeric <= entries.length) {
+    return { selectedKey: entries[numeric - 1]?.key ?? null, error: null };
+  }
+  const normalizedInput = normalized.toLowerCase();
+  const exactMatch =
+    entries.find((entry) => entry.key === normalized) ??
+    entries.find((entry) => (entry.displayName ?? "") === normalized);
+  const suffixMatches = entries.filter((entry) => {
+    const key = entry.key.toLowerCase();
+    const displayName = (entry.displayName ?? "").toLowerCase();
+    return (
+      key === normalizedInput ||
+      key.endsWith(`:${normalizedInput}`) ||
+      displayName === normalizedInput
+    );
+  });
+  if (exactMatch) {
+    return { selectedKey: exactMatch.key, error: null };
+  }
+  if (suffixMatches.length > 1) {
+    return {
+      selectedKey: null,
+      error: `Ambiguous session input. Use full key or index:\n${suffixMatches.map((entry) => entry.key).join("\n")}`,
+    };
+  }
+  if (suffixMatches.length === 1) {
+    return { selectedKey: suffixMatches[0]?.key ?? null, error: null };
+  }
+  return {
+    selectedKey: null,
+    error: "Session not found. Use index, full key, or unique key tail.",
+  };
+}
+
+async function submitSessionDialog(params: {
+  state: AppViewState;
+  sessionPrefix: string;
+  sessionOptions: Array<{ key: string; displayName?: string }>;
+  deletableSessionOptions: Array<{ key: string; displayName?: string }>;
+  switchActiveSession: (next: string) => void;
+  mainSessionKey: string | null;
+}) {
+  const {
+    state,
+    sessionPrefix,
+    sessionOptions,
+    deletableSessionOptions,
+    switchActiveSession,
+    mainSessionKey,
+  } = params;
+  const isCreate = state.sessionDialogMode === "create";
+  if (!isCreate && state.sessionDialogMode !== "delete") {
+    return;
+  }
+  state.sessionDialogBusy = true;
+  state.sessionDialogError = null;
+  try {
+    if (isCreate) {
+      const input = state.sessionDialogInput.trim();
+      const targetKey =
+        input.length === 0
+          ? `${sessionPrefix}${randomSessionSuffix()}`
+          : input.includes(":")
+            ? input
+            : `${sessionPrefix}${input}`;
+      const existing = sessionOptions.some((entry) => entry.key === targetKey);
+      if (existing && !state.sessionDialogConfirmOverwrite) {
+        state.sessionDialogConfirmOverwrite = true;
+        return;
+      }
+      const createdKey = await createSessionAndRefresh(state, targetKey);
+      if (!createdKey) {
+        state.sessionDialogError =
+          state.sessionsError ?? `Failed to create session "${targetKey}".`;
+        return;
+      }
+      switchActiveSession(createdKey);
+      state.sessionDialogMode = null;
+      return;
+    }
+
+    const resolved = resolveDeleteSessionSelection(
+      deletableSessionOptions,
+      state.sessionDialogInput,
+    );
+    if (!resolved.selectedKey) {
+      state.sessionDialogError = resolved.error;
+      return;
+    }
+    const deleted = await deleteSessionAndRefresh(state, resolved.selectedKey, {
+      skipConfirm: true,
+    });
+    if (!deleted) {
+      state.sessionDialogError =
+        state.sessionsError ?? `Failed to delete session "${resolved.selectedKey}".`;
+      return;
+    }
+    if (state.sessionKey === resolved.selectedKey) {
+      const fallback = mainSessionKey ?? resolveSidebarChatSessionKey(state);
+      if (fallback && fallback !== resolved.selectedKey) {
+        switchActiveSession(fallback);
+      }
+    }
+    state.sessionDialogMode = null;
+  } finally {
+    state.sessionDialogBusy = false;
+  }
+}
+
+function renderSessionDialog(params: {
+  state: AppViewState;
+  sessionPrefix: string;
+  sessionOptions: Array<{ key: string; displayName?: string }>;
+  deletableSessionOptions: Array<{ key: string; displayName?: string }>;
+  switchActiveSession: (next: string) => void;
+  mainSessionKey: string | null;
+}) {
+  const { state } = params;
+  if (!state.sessionDialogMode) {
+    return nothing;
+  }
+  const isCreate = state.sessionDialogMode === "create";
+  return renderSessionDialogView({
+    mode: state.sessionDialogMode,
+    title: isCreate ? "Create or reset session" : "Delete session",
+    subtitle: isCreate
+      ? `Prefix: ${params.sessionPrefix}. Enter suffix (xxx) or full key. Leave blank for random suffix.`
+      : "Enter index, full key, or unique key tail.",
+    primaryLabel: isCreate ? "Create or reset" : "Delete",
+    placeholder: isCreate ? "e.g. test-01 or agent:main:test-01" : "e.g. 2 or test-01",
+    input: state.sessionDialogInput,
+    busy: state.sessionDialogBusy,
+    connected: state.connected,
+    error: state.sessionDialogError,
+    confirmOverwrite: state.sessionDialogConfirmOverwrite,
+    deletableSessionOptions: params.deletableSessionOptions,
+    onInput: (value) => {
+      state.sessionDialogInput = value;
+      state.sessionDialogError = null;
+      state.sessionDialogConfirmOverwrite = false;
+    },
+    onSubmit: () => submitSessionDialog(params),
+    onCancel: () => {
+      state.sessionDialogMode = null;
+      state.sessionDialogError = null;
+      state.sessionDialogConfirmOverwrite = false;
+    },
+  });
 }
 
 function resolveMainSessionKey(

@@ -247,6 +247,11 @@ export class OpenClawApp extends LitElement {
   @state() sessionsFilterLimit = "120";
   @state() sessionsIncludeGlobal = true;
   @state() sessionsIncludeUnknown = false;
+  @state() sessionDialogMode: "create" | "delete" | null = null;
+  @state() sessionDialogInput = "";
+  @state() sessionDialogBusy = false;
+  @state() sessionDialogError: string | null = null;
+  @state() sessionDialogConfirmOverwrite = false;
 
   @state() usageLoading = false;
   @state() usageResult: import("./types.js").SessionsUsageResult | null = null;

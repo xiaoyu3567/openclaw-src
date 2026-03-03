@@ -165,6 +165,11 @@ export type AppViewState = {
   sessionsFilterLimit: string;
   sessionsIncludeGlobal: boolean;
   sessionsIncludeUnknown: boolean;
+  sessionDialogMode: "create" | "delete" | null;
+  sessionDialogInput: string;
+  sessionDialogBusy: boolean;
+  sessionDialogError: string | null;
+  sessionDialogConfirmOverwrite: boolean;
   usageLoading: boolean;
   usageResult: SessionsUsageResult | null;
   usageCostSummary: CostUsageSummary | null;

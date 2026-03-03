@@ -168,7 +168,7 @@ describe("createSessionAndRefresh", () => {
 
     expect(key).toBeNull();
     expect(request).toHaveBeenCalledTimes(1);
-    expect(state.sessionsError).toBe('Create session "agent:main:new-session" failed.');
+    expect(state.sessionsError).toBe('Create or reset session "agent:main:new-session" failed.');
   });
 });
 
@@ -181,5 +181,25 @@ describe("deleteSession", () => {
 
     expect(deleted).toBe(false);
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("skips browser confirm when skipConfirm is enabled", async () => {
+    const request = vi.fn(async (method: string) => {
+      if (method === "sessions.delete") {
+        return { ok: true };
+      }
+      throw new Error(`unexpected method: ${method}`);
+    });
+    const state = createState(request);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    const deleted = await deleteSession(state, "agent:main:test", { skipConfirm: true });
+
+    expect(deleted).toBe(true);
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledWith("sessions.delete", {
+      key: "agent:main:test",
+      deleteTranscript: true,
+    });
   });
 });
