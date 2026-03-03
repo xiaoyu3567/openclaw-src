@@ -16,7 +16,9 @@ import {
 } from "./app-channels.ts";
 import {
   handleAbortChat as handleAbortChatInternal,
+  handleRefineChatPrompt as handleRefineChatPromptInternal,
   handleSendChat as handleSendChatInternal,
+  handleUndoRefineChatPrompt as handleUndoRefineChatPromptInternal,
   removeQueuedMessage as removeQueuedMessageInternal,
 } from "./app-chat.ts";
 import { DEFAULT_CRON_FORM, DEFAULT_LOG_LEVEL_FILTERS } from "./app-defaults.ts";
@@ -152,6 +154,12 @@ export class OpenClawApp extends LitElement {
   @state() chatAvatarUrl: string | null = null;
   @state() chatThinkingLevel: string | null = null;
   @state() chatQueue: ChatQueueItem[] = [];
+  @state() chatRefineLoading = false;
+  @state() chatRefineStage: "idle" | "checking_api" | "preparing_context" | "refining" = "idle";
+  @state() chatRefineError: string | null = null;
+  @state() chatRefineLastOriginal: string | null = null;
+  @state() chatRefineLastAt: number | null = null;
+  @state() chatRefineRequestId = 0;
   @state() chatAttachments: ChatAttachment[] = [];
   @state() chatManualRefreshInFlight = false;
   // Sidebar state for tool output viewing
@@ -519,6 +527,18 @@ export class OpenClawApp extends LitElement {
       this as unknown as Parameters<typeof handleSendChatInternal>[0],
       messageOverride,
       opts,
+    );
+  }
+
+  async handleRefineChatPrompt() {
+    await handleRefineChatPromptInternal(
+      this as unknown as Parameters<typeof handleRefineChatPromptInternal>[0],
+    );
+  }
+
+  handleUndoRefineChatPrompt() {
+    handleUndoRefineChatPromptInternal(
+      this as unknown as Parameters<typeof handleUndoRefineChatPromptInternal>[0],
     );
   }
 

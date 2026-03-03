@@ -8,7 +8,10 @@ import { dispatchInboundMessage } from "../../auto-reply/dispatch.js";
 import { createReplyDispatcher } from "../../auto-reply/reply/reply-dispatcher.js";
 import type { MsgContext } from "../../auto-reply/templating.js";
 import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
-import { resolveSessionFilePath } from "../../config/sessions.js";
+import { createDefaultDeps } from "../../cli/deps.js";
+import { agentCommand } from "../../commands/agent.js";
+import { resolveSessionFilePath, updateSessionStore } from "../../config/sessions.js";
+import { defaultRuntime } from "../../runtime.js";
 import { resolveSendPolicy } from "../../sessions/send-policy.js";
 import {
   stripInlineDirectiveTagsForDisplay,
@@ -205,6 +208,41 @@ function jsonUtf8Bytes(value: unknown): number {
   } catch {
     return Buffer.byteLength(String(value), "utf8");
   }
+}
+
+function resolveAgentResponseText(result: unknown): string {
+  const payloads = (result as { payloads?: Array<{ text?: string }> } | null)?.payloads;
+  if (!Array.isArray(payloads) || payloads.length === 0) {
+    return "";
+  }
+  return payloads
+    .map((payload) => (typeof payload.text === "string" ? payload.text.trim() : ""))
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function normalizeRefineHistoryEntries(history: unknown): Array<{ role: string; text: string }> {
+  if (!Array.isArray(history)) {
+    return [];
+  }
+  const entries: Array<{ role: string; text: string }> = [];
+  for (const item of history) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const role =
+      typeof (item as { role?: unknown }).role === "string"
+        ? (item as { role: string }).role
+        : "unknown";
+    const textRaw =
+      typeof (item as { text?: unknown }).text === "string" ? (item as { text: string }).text : "";
+    const text = textRaw.trim();
+    if (!text) {
+      continue;
+    }
+    entries.push({ role, text });
+  }
+  return entries;
 }
 
 function buildOversizedHistoryPlaceholder(message?: unknown): Record<string, unknown> {
@@ -598,6 +636,111 @@ export const chatHandlers: GatewayRequestHandlers = {
       thinkingLevel,
       verboseLevel,
     });
+  },
+  "prompt.refine": async ({ params, respond }) => {
+    const sessionKey =
+      typeof (params as { sessionKey?: unknown }).sessionKey === "string"
+        ? (params as { sessionKey: string }).sessionKey.trim()
+        : "";
+    const draft =
+      typeof (params as { draft?: unknown }).draft === "string"
+        ? (params as { draft: string }).draft.trim()
+        : "";
+    const styleRaw =
+      typeof (params as { style?: unknown }).style === "string"
+        ? (params as { style: string }).style.trim().toLowerCase()
+        : "balanced";
+    const style =
+      styleRaw === "concise" || styleRaw === "detailed" || styleRaw === "balanced"
+        ? styleRaw
+        : "balanced";
+    const history = normalizeRefineHistoryEntries((params as { history?: unknown }).history).slice(
+      -12,
+    );
+    if (!sessionKey) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "sessionKey is required"));
+      return;
+    }
+    if (!draft) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "draft is required"));
+      return;
+    }
+
+    const historyText = history.length
+      ? history.map((entry, index) => `${index + 1}. [${entry.role}] ${entry.text}`).join("\n")
+      : "(no recent context)";
+    const instruction =
+      style === "concise"
+        ? "Keep it concise and direct."
+        : style === "detailed"
+          ? "Add useful detail and explicit constraints where implied by the draft."
+          : "Balance brevity and detail.";
+
+    const refinePrompt = [
+      "Task: Refine the user draft prompt for better clarity and execution.",
+      "Rules:",
+      "- Preserve user intent, tone, and language style.",
+      "- Preserve concrete entities (paths, commands, ids, numbers, constraints).",
+      "- Do not invent requirements not implied by draft/history.",
+      `- ${instruction}`,
+      "- Return only the refined prompt text.",
+      "Recent session context:",
+      historyText,
+      "User draft:",
+      draft,
+    ].join("\n\n");
+
+    const { cfg } = loadSessionEntry(sessionKey);
+    const sessionAgentId = resolveSessionAgentId({ sessionKey, config: cfg });
+    const refineSessionKey = `agent:${sessionAgentId}:prompt-refine:${Date.now()}`;
+
+    try {
+      const result = await agentCommand(
+        {
+          message: refinePrompt,
+          sessionKey: refineSessionKey,
+          deliver: false,
+        },
+        defaultRuntime,
+        createDefaultDeps(),
+      );
+      const refined = resolveAgentResponseText(result).trim();
+      if (!refined) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, "refine returned empty output"),
+        );
+        return;
+      }
+      respond(true, { refined });
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    } finally {
+      try {
+        const temp = loadSessionEntry(refineSessionKey);
+        if (temp.storePath) {
+          await updateSessionStore(temp.storePath, (store) => {
+            delete store[temp.canonicalKey];
+            return null;
+          });
+        }
+        const sessionId = temp.entry?.sessionId;
+        if (sessionId) {
+          const transcriptPath = resolveTranscriptPath({
+            sessionId,
+            storePath: temp.storePath,
+            sessionFile: temp.entry?.sessionFile,
+            agentId: sessionAgentId,
+          });
+          if (transcriptPath) {
+            fs.rmSync(transcriptPath, { force: true });
+          }
+        }
+      } catch {
+        // best-effort cleanup
+      }
+    }
   },
   "chat.abort": ({ params, respond, context }) => {
     if (!validateChatAbortParams(params)) {

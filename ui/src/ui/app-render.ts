@@ -1099,6 +1099,11 @@ export function renderApp(state: AppViewState) {
                 canSend: state.connected,
                 disabledReason: chatDisabledReason,
                 error: state.lastError,
+                refineLoading: state.chatRefineLoading,
+                refineStage: state.chatRefineStage,
+                refineError: state.chatRefineError,
+                canRefine: state.connected && state.chatMessage.trim().length > 0,
+                canUndoRefine: Boolean(state.chatRefineLastOriginal),
                 sessions: state.sessionsResult,
                 focusMode: chatFocus,
                 onRefresh: () => {
@@ -1115,10 +1120,15 @@ export function renderApp(state: AppViewState) {
                   });
                 },
                 onChatScroll: (event) => state.handleChatScroll(event),
-                onDraftChange: (next) => (state.chatMessage = next),
+                onDraftChange: (next) => {
+                  state.chatMessage = next;
+                  state.chatRefineError = null;
+                },
                 attachments: state.chatAttachments,
                 onAttachmentsChange: (next) => (state.chatAttachments = next),
                 onSend: () => state.handleSendChat(),
+                onRefine: () => void state.handleRefineChatPrompt(),
+                onUndoRefine: () => state.handleUndoRefineChatPrompt(),
                 canAbort: Boolean(state.chatRunId),
                 onAbort: () => void state.handleAbortChat(),
                 onQueueRemove: (id) => state.removeQueuedMessage(id),

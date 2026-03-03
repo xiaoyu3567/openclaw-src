@@ -461,6 +461,15 @@ export type SessionsPatchResult = {
   };
 };
 
+export type PromptRefineHistoryEntry = {
+  role: string;
+  text: string;
+};
+
+export type PromptRefineResult = {
+  refined: string;
+};
+
 export type {
   CostUsageDailyEntry,
   CostUsageSummary,

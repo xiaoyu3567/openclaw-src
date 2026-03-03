@@ -272,6 +272,7 @@
 }
 
 .chat-compose__field {
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
@@ -304,6 +305,35 @@
   cursor: not-allowed;
 }
 
+.chat-refine-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: rgba(10, 12, 18, 0.42);
+  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  pointer-events: none;
+}
+
+.chat-refine-overlay__spinner {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+
+.chat-refine-overlay__label-short {
+  display: none;
+}
+
+:root[data-theme="light"] .chat-refine-overlay {
+  background: rgba(255, 255, 255, 0.7);
+}
+
 .chat-compose__actions {
   flex-shrink: 0;
   display: flex;
@@ -320,6 +350,38 @@
   line-height: 1;
   white-space: nowrap;
   box-sizing: border-box;
+}
+
+.chat-refine-btn,
+.chat-stop-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.chat-compose .chat-compose__actions .btn:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.chat-compose .chat-compose__actions .btn:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.chat-refine-btn__icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.chat-refine-btn__label {
+  line-height: 1;
 }
 
 /* Chat controls - moved to content-header area, left aligned */
@@ -458,16 +520,70 @@
     gap: 8px;
   }
 
-  /* Mobile: stack action buttons vertically */
   .chat-compose__actions {
-    flex-direction: column;
     width: 100%;
     gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
-  /* Mobile: full-width buttons */
   .chat-compose .chat-compose__actions .btn {
-    width: 100%;
+    width: auto;
+  }
+
+  .chat-compose .chat-compose__actions .chat-refine-btn,
+  .chat-compose .chat-compose__actions .chat-stop-btn {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    padding: 0;
+    aspect-ratio: 1 / 1;
+    flex: 0 0 40px;
+  }
+
+  .chat-compose .chat-compose__actions .btn.primary {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .chat-compose .chat-compose__actions .chat-refine-btn .chat-refine-btn__label,
+  .chat-compose .chat-compose__actions .chat-stop-btn .chat-stop-btn__label {
+    display: none;
+  }
+
+  .chat-compose .chat-compose__actions .chat-stop-btn::before {
+    content: "■";
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .chat-compose .chat-compose__actions .chat-undo-refine-btn {
+    display: none;
+  }
+
+  .chat-refine-overlay {
+    inset: auto 8px 8px 8px;
+    height: 24px;
+    border-radius: 999px;
+    padding: 0 10px;
+    justify-content: flex-start;
+    gap: 6px;
+    background: rgba(10, 12, 18, 0.68);
+    border-color: rgba(255, 255, 255, 0.16);
+    font-size: 11px;
+  }
+
+  .chat-refine-overlay__spinner {
+    width: 12px;
+    height: 12px;
+  }
+
+  .chat-refine-overlay__label {
+    display: none;
+  }
+
+  .chat-refine-overlay__label-short {
+    display: inline;
   }
 
   .chat-controls {
