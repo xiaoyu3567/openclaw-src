@@ -5,18 +5,27 @@ import { resetToolStream } from "./app-tool-stream.ts";
 import type { OpenClawApp } from "./app.ts";
 import { abortChatRun, loadChatHistory, sendChatMessage } from "./controllers/chat.ts";
 import { loadSessions } from "./controllers/sessions.ts";
-import type { GatewayHelloOk } from "./gateway.ts";
+import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import { normalizeBasePath } from "./navigation.ts";
+import type { PromptRefineHistoryEntry } from "./types.ts";
 import type { ChatAttachment, ChatQueueItem } from "./ui-types.ts";
 import { generateUUID } from "./uuid.ts";
 
 export type ChatHost = {
   connected: boolean;
+  client: GatewayBrowserClient | null;
   chatMessage: string;
+  chatMessages: unknown[];
   chatAttachments: ChatAttachment[];
   chatQueue: ChatQueueItem[];
   chatRunId: string | null;
   chatSending: boolean;
+  chatRefineLoading: boolean;
+  chatRefineStage: "idle" | "checking_api" | "preparing_context" | "refining";
+  chatRefineError: string | null;
+  chatRefineLastOriginal: string | null;
+  chatRefineLastAt: number | null;
+  chatRefineRequestId: number;
   sessionKey: string;
   basePath: string;
   hello: GatewayHelloOk | null;
@@ -159,6 +168,147 @@ async function flushChatQueue(host: ChatHost) {
 
 export function removeQueuedMessage(host: ChatHost, id: string) {
   host.chatQueue = host.chatQueue.filter((item) => item.id !== id);
+}
+
+function messageTextFromContent(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  return content
+    .map((block) => {
+      if (!block || typeof block !== "object") {
+        return "";
+      }
+      const text = (block as { text?: unknown }).text;
+      return typeof text === "string" ? text : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildPromptRefineHistory(messages: unknown[]): PromptRefineHistoryEntry[] {
+  if (!Array.isArray(messages)) {
+    return [];
+  }
+  const items: PromptRefineHistoryEntry[] = [];
+  for (let i = Math.max(0, messages.length - 14); i < messages.length; i++) {
+    const entry = messages[i];
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const roleRaw = (entry as { role?: unknown }).role;
+    const role = typeof roleRaw === "string" ? roleRaw : "unknown";
+    if (role !== "user" && role !== "assistant" && role !== "system") {
+      continue;
+    }
+    const text = messageTextFromContent((entry as { content?: unknown }).content).trim();
+    if (!text) {
+      continue;
+    }
+    items.push({ role, text });
+  }
+  return items;
+}
+
+function normalizeRefineError(message: string): string {
+  if (message.includes("timed out")) {
+    return "Refine failed: request timed out (20s).";
+  }
+  if (message.includes("gateway not connected")) {
+    return "Refine failed: gateway not connected.";
+  }
+  if (message.includes("missing run id")) {
+    return "Refine failed: backend did not return run id.";
+  }
+  if (message.includes("empty output")) {
+    return "Refine failed: model returned empty text.";
+  }
+  if (message.includes("model error")) {
+    return "Refine failed: model run error.";
+  }
+  return `Refine failed: ${message}`;
+}
+
+type PromptRefineResult = { refined?: string };
+
+export async function handleRefineChatPrompt(host: ChatHost) {
+  if (!host.connected || !host.client || host.chatRefineLoading) {
+    return;
+  }
+  const draft = host.chatMessage.trim();
+  if (!draft) {
+    return;
+  }
+  const requestId = host.chatRefineRequestId + 1;
+  host.chatRefineRequestId = requestId;
+  host.chatRefineLoading = true;
+  host.chatRefineStage = "checking_api";
+  host.chatRefineError = null;
+  const original = host.chatMessage;
+  host.chatRefineLastOriginal = original;
+
+  try {
+    await host.client.request("status", {});
+    if (host.chatRefineRequestId !== requestId) {
+      return;
+    }
+
+    host.chatRefineStage = "preparing_context";
+    const history = buildPromptRefineHistory(host.chatMessages);
+
+    host.chatRefineStage = "refining";
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      window.setTimeout(() => reject(new Error("timed out")), 20_000);
+    });
+
+    const refinePromise = host.client.request<PromptRefineResult>("prompt.refine", {
+      sessionKey: host.sessionKey,
+      draft,
+      style: "balanced",
+      history,
+    });
+
+    const refinedResult = await Promise.race([refinePromise, timeoutPromise]);
+    const refined = typeof refinedResult?.refined === "string" ? refinedResult.refined.trim() : "";
+    if (!refined) {
+      throw new Error("empty output");
+    }
+
+    if (host.chatRefineRequestId !== requestId) {
+      return;
+    }
+    if (host.chatMessage !== original) {
+      return;
+    }
+    if (refined.trim() === draft.trim()) {
+      host.chatRefineError = "Refine completed: no significant changes.";
+      return;
+    }
+    host.chatMessage = refined;
+    host.chatRefineLastAt = Date.now();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    host.chatRefineError = normalizeRefineError(message || "unknown error");
+  } finally {
+    if (host.chatRefineRequestId === requestId) {
+      host.chatRefineLoading = false;
+      host.chatRefineStage = "idle";
+    }
+  }
+}
+
+export function handleUndoRefineChatPrompt(host: ChatHost) {
+  const previous = host.chatRefineLastOriginal;
+  if (!previous) {
+    return;
+  }
+  host.chatMessage = previous;
+  host.chatRefineLastOriginal = null;
+  host.chatRefineLastAt = null;
+  host.chatRefineError = null;
 }
 
 export async function handleSendChat(

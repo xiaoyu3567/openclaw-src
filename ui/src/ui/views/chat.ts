@@ -52,6 +52,11 @@ export type ChatProps = {
   canSend: boolean;
   disabledReason: string | null;
   error: string | null;
+  refineLoading?: boolean;
+  refineStage?: "idle" | "checking_api" | "preparing_context" | "refining";
+  refineError?: string | null;
+  canRefine?: boolean;
+  canUndoRefine?: boolean;
   sessions: SessionsListResult | null;
   // Focus mode
   focusMode: boolean;
@@ -73,6 +78,8 @@ export type ChatProps = {
   onToggleFocusMode: () => void;
   onDraftChange: (next: string) => void;
   onSend: () => void;
+  onRefine?: () => void;
+  onUndoRefine?: () => void;
   onAbort?: () => void;
   onQueueRemove: (id: string) => void;
   onNewSession: () => void;
@@ -203,6 +210,32 @@ function handlePaste(e: ClipboardEvent, props: ChatProps) {
   }
 }
 
+function renderRefineStageLabel(stage: ChatProps["refineStage"]): string {
+  if (stage === "checking_api") {
+    return "1/3 Testing API...";
+  }
+  if (stage === "preparing_context") {
+    return "2/3 Organizing session history...";
+  }
+  if (stage === "refining") {
+    return "3/3 Optimizing prompt...";
+  }
+  return "Refining...";
+}
+
+function renderRefineStageShortLabel(stage: ChatProps["refineStage"]): string {
+  if (stage === "checking_api") {
+    return "API check";
+  }
+  if (stage === "preparing_context") {
+    return "History";
+  }
+  if (stage === "refining") {
+    return "Optimizing";
+  }
+  return "Refining";
+}
+
 function renderAttachmentPreview(props: ChatProps) {
   const attachments = props.attachments ?? [];
   if (attachments.length === 0) {
@@ -319,6 +352,13 @@ export function renderChat(props: ChatProps) {
       ${props.disabledReason ? html`<div class="callout">${props.disabledReason}</div>` : nothing}
 
       ${props.error ? html`<div class="callout danger">${props.error}</div>` : nothing}
+      ${
+        props.refineError
+          ? html`<div class="callout ${props.refineError.startsWith("Refine completed") ? "" : "danger"}">
+              ${props.refineError}
+            </div>`
+          : nothing
+      }
 
       ${
         props.focusMode
@@ -429,7 +469,7 @@ export function renderChat(props: ChatProps) {
               ${ref((el) => el && adjustTextareaHeight(el as HTMLTextAreaElement))}
               .value=${props.draft}
               dir=${detectTextDirection(props.draft)}
-              ?disabled=${!props.connected}
+              ?disabled=${!props.connected || Boolean(props.refineLoading)}
               @keydown=${(e: KeyboardEvent) => {
                 if (e.key !== "Enter") {
                   return;
@@ -445,6 +485,10 @@ export function renderChat(props: ChatProps) {
                   return;
                 }
                 e.preventDefault();
+                if (e.shiftKey) {
+                  props.onRefine?.();
+                  return;
+                }
                 if (canCompose) {
                   props.onSend();
                 }
@@ -457,20 +501,56 @@ export function renderChat(props: ChatProps) {
               @paste=${(e: ClipboardEvent) => handlePaste(e, props)}
               placeholder=${composePlaceholder}
             ></textarea>
+            ${
+              props.refineLoading
+                ? html`<div class="chat-refine-overlay" role="status" aria-live="polite">
+                    <span class="chat-refine-overlay__spinner">${icons.loader}</span>
+                    <span class="chat-refine-overlay__label">${renderRefineStageLabel(props.refineStage)}</span>
+                    <span class="chat-refine-overlay__label-short"
+                      >${renderRefineStageShortLabel(props.refineStage)}</span
+                    >
+                  </div>`
+                : nothing
+            }
           </label>
           <div class="chat-compose__actions">
             ${
               canAbort
                 ? html`
                     <button
-                      class="btn"
+                      class="btn chat-stop-btn"
                       ?disabled=${!props.connected || props.sending}
                       @click=${props.onAbort}
+                      aria-label="Stop"
+                      title="Stop"
                     >
-                      Stop
+                      <span class="chat-stop-btn__label">Stop</span>
                     </button>
                   `
-                : nothing
+                : html`
+                    <button
+                      class="btn chat-refine-btn"
+                      ?disabled=${!props.canRefine || props.refineLoading}
+                      @click=${() => props.onRefine?.()}
+                      aria-label="Refine prompt"
+                      title="Refine prompt"
+                    >
+                      <span class="chat-refine-btn__icon">✨</span>
+                      <span class="chat-refine-btn__label"
+                        >${props.refineLoading ? "Refining..." : "Refine"}</span
+                      >
+                    </button>
+                    ${
+                      props.canUndoRefine
+                        ? html`<button
+                            class="btn chat-undo-refine-btn"
+                            @click=${() => props.onUndoRefine?.()}
+                          >
+                            Undo refine
+                          </button>`
+                        : nothing
+                    }
+                  `
             }
             <button
               class="btn primary"

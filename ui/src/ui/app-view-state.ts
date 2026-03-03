@@ -77,6 +77,12 @@ export type AppViewState = {
   chatAvatarUrl: string | null;
   chatThinkingLevel: string | null;
   chatQueue: ChatQueueItem[];
+  chatRefineLoading: boolean;
+  chatRefineStage: "idle" | "checking_api" | "preparing_context" | "refining";
+  chatRefineError: string | null;
+  chatRefineLastOriginal: string | null;
+  chatRefineLastAt: number | null;
+  chatRefineRequestId: number;
   chatManualRefreshInFlight: boolean;
   nodesLoading: boolean;
   nodes: Array<Record<string, unknown>>;
@@ -165,6 +171,11 @@ export type AppViewState = {
   sessionsFilterLimit: string;
   sessionsIncludeGlobal: boolean;
   sessionsIncludeUnknown: boolean;
+  sessionDialogMode: "create" | "delete" | null;
+  sessionDialogInput: string;
+  sessionDialogBusy: boolean;
+  sessionDialogError: string | null;
+  sessionDialogConfirmOverwrite: boolean;
   usageLoading: boolean;
   usageResult: SessionsUsageResult | null;
   usageCostSummary: CostUsageSummary | null;
@@ -331,6 +342,8 @@ export type AppViewState = {
   setSessionKey: (next: string) => void;
   setChatMessage: (next: string) => void;
   handleSendChat: (messageOverride?: string, opts?: { restoreDraft?: boolean }) => Promise<void>;
+  handleRefineChatPrompt: () => Promise<void>;
+  handleUndoRefineChatPrompt: () => void;
   handleAbortChat: () => Promise<void>;
   removeQueuedMessage: (id: string) => void;
   handleChatScroll: (event: Event) => void;

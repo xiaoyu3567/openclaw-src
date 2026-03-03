@@ -255,6 +255,7 @@ Write-Host "[5/9] Writing OpenClaw model/agent/usage config..."
 Configure-OpenClawSettings
 Configure-UsageProvider
 openclaw config set gateway.mode local
+openclaw config set update.checkOnStart false
 
 Write-Host "[6/9] Preparing repository and dependencies..."
 $workspace = Join-Path $HOME ".openclaw\workspace"

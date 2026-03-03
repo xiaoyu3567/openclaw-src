@@ -181,7 +181,7 @@ describe("chat view", () => {
     nowSpy.mockRestore();
   });
 
-  it("shows a stop button when aborting is available", () => {
+  it("shows Stop and hides Refine when aborting is available", () => {
     const container = document.createElement("div");
     const onAbort = vi.fn();
     render(
@@ -200,6 +200,7 @@ describe("chat view", () => {
     expect(stopButton).not.toBeUndefined();
     stopButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain("Refine");
     expect(container.textContent).not.toContain("New session");
   });
 
@@ -271,5 +272,39 @@ describe("chat view", () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(ctrlEnterEvent.defaultPrevented).toBe(true);
+  });
+
+  it("triggers Refine on Ctrl+Shift+Enter", () => {
+    const container = document.createElement("div");
+    const onRefine = vi.fn();
+    const onSend = vi.fn();
+    render(
+      renderChat(
+        createProps({
+          connected: true,
+          draft: "hello",
+          canRefine: true,
+          onRefine,
+          onSend,
+        }),
+      ),
+      container,
+    );
+
+    const textarea = container.querySelector("textarea");
+    expect(textarea).not.toBeNull();
+
+    const shortcutEvent = new KeyboardEvent("keydown", {
+      key: "Enter",
+      ctrlKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    textarea?.dispatchEvent(shortcutEvent);
+
+    expect(onRefine).toHaveBeenCalledTimes(1);
+    expect(onSend).not.toHaveBeenCalled();
+    expect(shortcutEvent.defaultPrevented).toBe(true);
   });
 });
