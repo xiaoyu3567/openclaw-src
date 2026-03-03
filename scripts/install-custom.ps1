@@ -119,7 +119,8 @@ function Uninstall-ExistingOpenClaw {
   try {
     $left = Get-NetTCPConnection -State Listen -LocalPort 18789 -ErrorAction Stop
     if ($left) {
-      throw "Port 18789 is still occupied after cleanup."
+      $pids = ($left | Select-Object -ExpandProperty OwningProcess -Unique) -join ", "
+      throw "Port 18789 is still occupied after cleanup. Please kill PID(s) manually: $pids ; then rerun installer."
     }
   } catch {
     if ($_.Exception.Message -notmatch "No matching MSFT_NetTCPConnection") {

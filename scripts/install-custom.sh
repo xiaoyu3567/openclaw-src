@@ -133,6 +133,13 @@ uninstall_existing_openclaw() {
 
   if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ':18789 '; then
     printf "Error: port 18789 is still occupied after cleanup.\n" >&2
+    printf "Please kill the listener manually and rerun installer.\n" >&2
+    if command -v lsof >/dev/null 2>&1; then
+      printf "Hint: lsof -nP -iTCP:18789 -sTCP:LISTEN\n" >&2
+    else
+      printf "Hint: ss -ltnp | grep 18789\n" >&2
+    fi
+    printf "Then: kill <PID> (or kill -9 <PID> if needed).\n" >&2
     exit 1
   fi
 
