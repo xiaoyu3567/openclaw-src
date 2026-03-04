@@ -62,6 +62,9 @@ export type ChatProps = {
   quickToolRunning?: boolean;
   quickResultText?: string | null;
   quickResultError?: string | null;
+  atPickerOpen?: boolean;
+  atPickerQuery?: string;
+  atPickerEntries?: string[];
   sessions: SessionsListResult | null;
   // Focus mode
   focusMode: boolean;
@@ -89,6 +92,9 @@ export type ChatProps = {
   onRunQuickTodos?: () => void;
   onCopyQuickResult?: () => void;
   onCloseQuickResult?: () => void;
+  onAtPickerQueryChange?: (query: string) => void;
+  onAtPickerSelect?: (entry: string) => void;
+  onAtPickerClose?: () => void;
   onToggleQuickTools?: () => void;
   onAbort?: () => void;
   onQueueRemove: (id: string) => void;
@@ -220,6 +226,31 @@ function handlePaste(e: ClipboardEvent, props: ChatProps) {
   }
 }
 
+function showPlusComingSoon(event: Event) {
+  const trigger = event.currentTarget as HTMLElement | null;
+  if (!trigger) {
+    return;
+  }
+  const host = trigger.closest(".chat-plus-picker");
+  if (!host) {
+    return;
+  }
+
+  const existing = host.querySelector(".chat-plus-inline-tip");
+  if (existing) {
+    existing.classList.remove("chat-plus-inline-tip--fade");
+    window.setTimeout(() => existing.classList.add("chat-plus-inline-tip--fade"), 10);
+    return;
+  }
+
+  const tip = document.createElement("span");
+  tip.className = "chat-plus-inline-tip";
+  tip.textContent = "Coming soon";
+  host.appendChild(tip);
+  window.setTimeout(() => tip.classList.add("chat-plus-inline-tip--fade"), 1200);
+  window.setTimeout(() => tip.remove(), 2000);
+}
+
 function renderRefineStageLabel(stage: ChatProps["refineStage"]): string {
   if (stage === "checking_api") {
     return "1/3 Testing API...";
@@ -292,12 +323,7 @@ export function renderChat(props: ChatProps) {
     avatar: props.assistantAvatar ?? props.assistantAvatarUrl ?? null,
   };
 
-  const hasAttachments = (props.attachments?.length ?? 0) > 0;
-  const composePlaceholder = props.connected
-    ? hasAttachments
-      ? "Add a message or paste more images..."
-      : "Message (Enter for line breaks, Ctrl/Cmd+Enter to send, paste images)"
-    : "Connect to the gateway to start chatting…";
+  const composePlaceholder = "";
 
   const splitRatio = props.splitRatio ?? 0.6;
   const sidebarOpen = Boolean(props.sidebarOpen && props.onCloseSidebar);
@@ -474,6 +500,10 @@ export function renderChat(props: ChatProps) {
               dir=${detectTextDirection(props.draft)}
               ?disabled=${!props.connected || Boolean(props.refineLoading)}
               @keydown=${(e: KeyboardEvent) => {
+                if (e.key === "Escape") {
+                  props.onAtPickerClose?.();
+                  return;
+                }
                 if (e.key !== "Enter") {
                   return;
                 }
@@ -500,6 +530,14 @@ export function renderChat(props: ChatProps) {
                 const target = e.target as HTMLTextAreaElement;
                 adjustTextareaHeight(target);
                 props.onDraftChange(target.value);
+                const cursor = target.selectionStart ?? target.value.length;
+                const beforeCursor = target.value.slice(0, cursor);
+                const match = beforeCursor.match(/(?:^|\s)@([^\s]*)$/);
+                if (match) {
+                  props.onAtPickerQueryChange?.(match[1] ?? "");
+                } else {
+                  props.onAtPickerClose?.();
+                }
               }}
               @paste=${(e: ClipboardEvent) => handlePaste(e, props)}
               placeholder=${composePlaceholder}
@@ -526,6 +564,35 @@ export function renderChat(props: ChatProps) {
                   </div>`
                 : nothing
             }
+            ${
+              props.atPickerOpen
+                ? html`<div class="chat-at-picker" role="listbox" aria-label="File suggestions">
+                    <input
+                      class="chat-at-picker__input"
+                      .value=${props.atPickerQuery ?? ""}
+                      @input=${(e: Event) =>
+                        props.onAtPickerQueryChange?.((e.target as HTMLInputElement).value)}
+                      placeholder="Type path"
+                    />
+                    <div class="chat-at-picker__list">
+                      ${
+                        (props.atPickerEntries ?? []).length > 0
+                          ? (props.atPickerEntries ?? []).map(
+                              (entry) => html`<button
+                                class="btn chat-at-picker__item"
+                                @click=${() => props.onAtPickerSelect?.(entry)}
+                              >
+                                ${entry}
+                              </button>`,
+                            )
+                          : html`
+                              <div class="chat-at-picker__empty">No files</div>
+                            `
+                      }
+                    </div>
+                  </div>`
+                : nothing
+            }
           </label>
           <div class="chat-compose__actions">
             ${
@@ -542,23 +609,37 @@ export function renderChat(props: ChatProps) {
                     </button>
                   `
                 : html`
-                    <div class="chat-quick-tools">
+                    <div class="chat-plus-picker">
                       <button
-                        class="btn chat-tools-btn"
+                        class="btn chat-toolbar-icon-btn chat-toolbar-icon-btn--plus"
+                        ?disabled=${props.quickToolRunning}
+                        @click=${(event: Event) => showPlusComingSoon(event)}
+                        aria-label="More tools"
+                        title="Coming soon"
+                      >
+                        <span>+</span>
+                      </button>
+                    </div>
+                    <div class="chat-quick-tools chat-quick-tools--picker">
+                      <button
+                        class="btn chat-toolbar-pill-btn chat-toolbar-pill-btn--tools"
                         ?disabled=${props.quickToolRunning}
                         @click=${() => props.onToggleQuickTools?.()}
-                        aria-label="Quick tools"
-                        title="Quick tools"
+                        aria-label="工具"
+                        title="工具"
+                        aria-expanded=${props.quickToolsOpen ? "true" : "false"}
                       >
-                        ⚡
+                        <span class="chat-toolbar-pill-btn__icon">${icons.wrench}</span>
+                        <span>工具</span>
                       </button>
                       ${
                         props.quickToolsOpen
-                          ? html`<div class="chat-quick-tools__menu">
+                          ? html`<div class="chat-quick-tools__menu" role="listbox" aria-label="工具选择器">
                               <button
                                 class="btn chat-quick-tools__item"
                                 ?disabled=${props.quickToolRunning}
                                 @click=${() => props.onRunQuickSummary?.()}
+                                aria-current="true"
                               >
                                 ${props.quickToolRunning ? "Running..." : "Summarize latest"}
                               </button>
@@ -574,16 +655,14 @@ export function renderChat(props: ChatProps) {
                       }
                     </div>
                     <button
-                      class="btn chat-refine-btn"
+                      class="btn chat-toolbar-pill-btn chat-toolbar-pill-btn--refine"
                       ?disabled=${!props.canRefine || props.refineLoading}
                       @click=${() => props.onRefine?.()}
-                      aria-label="Refine prompt"
-                      title="Refine prompt"
+                      aria-label="Refine"
+                      title="Refine"
                     >
-                      <span class="chat-refine-btn__icon">✨</span>
-                      <span class="chat-refine-btn__label"
-                        >${props.refineLoading ? "Refining..." : "Refine"}</span
-                      >
+                      <span class="chat-toolbar-pill-btn__icon">${icons.zap}</span>
+                      <span>Refine</span>
                     </button>
                     ${
                       props.canUndoRefine
@@ -598,11 +677,13 @@ export function renderChat(props: ChatProps) {
                   `
             }
             <button
-              class="btn primary"
+              class="btn chat-send-circle-btn"
               ?disabled=${!props.connected}
               @click=${props.onSend}
+              aria-label=${isBusy ? "Queue" : "Send"}
+              title=${isBusy ? "Queue" : "Send"}
             >
-              ${isBusy ? "Queue" : "Send"}<kbd class="btn-kbd">Ctrl/Cmd+↵</kbd>
+              <span class="chat-send-circle-btn__icon">${icons.arrowDown}</span>
             </button>
           </div>
         </div>

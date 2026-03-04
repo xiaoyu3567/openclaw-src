@@ -16,6 +16,9 @@ import {
 } from "./app-channels.ts";
 import {
   handleAbortChat as handleAbortChatInternal,
+  handleAtPickerClose as handleAtPickerCloseInternal,
+  handleAtPickerQueryChange as handleAtPickerQueryChangeInternal,
+  handleAtPickerSelect as handleAtPickerSelectInternal,
   handleCopyQuickResult as handleCopyQuickResultInternal,
   handleRefineChatPrompt as handleRefineChatPromptInternal,
   handleRunQuickSummary as handleRunQuickSummaryInternal,
@@ -166,6 +169,9 @@ export class OpenClawApp extends LitElement {
   @state() quickToolRunning = false;
   @state() quickResultText: string | null = null;
   @state() quickResultError: string | null = null;
+  @state() atPickerOpen = false;
+  @state() atPickerQuery = "";
+  @state() atPickerEntries: string[] = [];
   @state() chatRefineLastOriginal: string | null = null;
   @state() chatRefineLastAt: number | null = null;
   @state() chatRefineRequestId = 0;
@@ -576,6 +582,26 @@ export class OpenClawApp extends LitElement {
   handleCloseQuickResult() {
     this.quickResultText = null;
     this.quickResultError = null;
+  }
+
+  async handleAtPickerQueryChange(query: string) {
+    await handleAtPickerQueryChangeInternal(
+      this as unknown as Parameters<typeof handleAtPickerQueryChangeInternal>[0],
+      query,
+    );
+  }
+
+  handleAtPickerSelect(entry: string) {
+    handleAtPickerSelectInternal(
+      this as unknown as Parameters<typeof handleAtPickerSelectInternal>[0],
+      entry,
+    );
+  }
+
+  handleAtPickerClose() {
+    handleAtPickerCloseInternal(
+      this as unknown as Parameters<typeof handleAtPickerCloseInternal>[0],
+    );
   }
 
   async handleWhatsAppStart(force: boolean) {

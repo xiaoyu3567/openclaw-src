@@ -735,4 +735,55 @@ export const agentsHandlers: GatewayRequestHandlers = {
       undefined,
     );
   },
+  "workspace.files.list": async ({ params, respond }) => {
+    const agentIdRaw =
+      params &&
+      typeof params === "object" &&
+      typeof (params as { agentId?: unknown }).agentId === "string"
+        ? ((params as { agentId?: string }).agentId ?? "")
+        : "main";
+    const queryRaw =
+      params &&
+      typeof params === "object" &&
+      typeof (params as { query?: unknown }).query === "string"
+        ? ((params as { query?: string }).query ?? "")
+        : "";
+    const cfg = loadConfig();
+    const agentId = resolveAgentIdOrError(agentIdRaw, cfg) ?? "main";
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    const normalizedQuery = queryRaw.replaceAll("\\", "/").trim();
+    const isAbsoluteQuery = normalizedQuery.startsWith("/");
+    const baseDir = normalizedQuery.includes("/")
+      ? normalizedQuery.slice(0, normalizedQuery.lastIndexOf("/") + 1)
+      : "";
+    const needle = normalizedQuery.includes("/")
+      ? normalizedQuery.slice(normalizedQuery.lastIndexOf("/") + 1).toLowerCase()
+      : normalizedQuery.toLowerCase();
+
+    const candidateDir = isAbsoluteQuery
+      ? path.resolve(baseDir || normalizedQuery || "/")
+      : path.resolve(workspaceDir, baseDir || ".");
+    const candidateReal = await fs.realpath(candidateDir).catch(() => candidateDir);
+    if (!isAbsoluteQuery) {
+      const workspaceReal = await fs.realpath(workspaceDir).catch(() => workspaceDir);
+      if (!candidateReal.startsWith(workspaceReal)) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "path escapes workspace"));
+        return;
+      }
+    }
+
+    const pathPrefix = isAbsoluteQuery ? baseDir || "/" : baseDir;
+    let entries: string[] = [];
+    try {
+      const dirents = await fs.readdir(candidateReal, { withFileTypes: true });
+      entries = dirents
+        .filter((entry) => (needle ? entry.name.toLowerCase().includes(needle) : true))
+        .slice(0, 80)
+        .map((entry) => `${pathPrefix}${entry.name}${entry.isDirectory() ? "/" : ""}`);
+    } catch {
+      entries = [];
+    }
+
+    respond(true, { agentId, baseDir, query: normalizedQuery, entries }, undefined);
+  },
 };

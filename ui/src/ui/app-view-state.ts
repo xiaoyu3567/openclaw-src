@@ -86,6 +86,9 @@ export type AppViewState = {
   quickToolRunning: boolean;
   quickResultText: string | null;
   quickResultError: string | null;
+  atPickerOpen: boolean;
+  atPickerQuery: string;
+  atPickerEntries: string[];
   chatRefineLastOriginal: string | null;
   chatRefineLastAt: number | null;
   chatRefineRequestId: number;
@@ -354,6 +357,9 @@ export type AppViewState = {
   handleRunQuickTodos: () => Promise<void>;
   handleCopyQuickResult: () => Promise<void>;
   handleCloseQuickResult: () => void;
+  handleAtPickerQueryChange: (query: string) => Promise<void>;
+  handleAtPickerSelect: (entry: string) => void;
+  handleAtPickerClose: () => void;
   toggleQuickTools: () => void;
   handleAbortChat: () => Promise<void>;
   removeQueuedMessage: (id: string) => void;

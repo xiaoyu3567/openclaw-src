@@ -470,6 +470,13 @@ export type PromptRefineResult = {
   refined: string;
 };
 
+export type WorkspaceFilesListResult = {
+  agentId: string;
+  baseDir: string;
+  query: string;
+  entries: string[];
+};
+
 export type {
   CostUsageDailyEntry,
   CostUsageSummary,

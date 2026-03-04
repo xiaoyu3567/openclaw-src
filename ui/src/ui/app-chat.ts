@@ -7,7 +7,7 @@ import { abortChatRun, loadChatHistory, sendChatMessage } from "./controllers/ch
 import { loadSessions } from "./controllers/sessions.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import { normalizeBasePath } from "./navigation.ts";
-import type { PromptRefineHistoryEntry } from "./types.ts";
+import type { PromptRefineHistoryEntry, WorkspaceFilesListResult } from "./types.ts";
 import type { ChatAttachment, ChatQueueItem } from "./ui-types.ts";
 import { generateUUID } from "./uuid.ts";
 
@@ -29,6 +29,9 @@ export type ChatHost = {
   quickToolRunning: boolean;
   quickResultText: string | null;
   quickResultError: string | null;
+  atPickerOpen: boolean;
+  atPickerQuery: string;
+  atPickerEntries: string[];
   chatRefineLastOriginal: string | null;
   chatRefineLastAt: number | null;
   chatRefineRequestId: number;
@@ -474,6 +477,40 @@ export async function handleCopyQuickResult(host: ChatHost) {
   } catch {
     host.quickResultError = "Failed: copy unavailable.";
   }
+}
+
+export async function handleAtPickerQueryChange(host: ChatHost, query: string) {
+  host.atPickerQuery = query;
+  host.atPickerOpen = true;
+  if (!host.connected || !host.client) {
+    host.atPickerEntries = [];
+    return;
+  }
+  const agentId = parseAgentSessionKey(host.sessionKey)?.agentId ?? "main";
+  try {
+    const res = await host.client.request<WorkspaceFilesListResult>("workspace.files.list", {
+      agentId,
+      query,
+    });
+    host.atPickerEntries = Array.isArray(res?.entries) ? res.entries : [];
+  } catch {
+    host.atPickerEntries = [];
+  }
+}
+
+export function handleAtPickerSelect(host: ChatHost, entry: string) {
+  const markerIndex = host.chatMessage.lastIndexOf(`@${host.atPickerQuery}`);
+  if (markerIndex >= 0) {
+    host.chatMessage =
+      host.chatMessage.slice(0, markerIndex) +
+      `@${entry} ` +
+      host.chatMessage.slice(markerIndex + host.atPickerQuery.length + 1);
+  }
+  host.atPickerOpen = false;
+}
+
+export function handleAtPickerClose(host: ChatHost) {
+  host.atPickerOpen = false;
 }
 
 export async function handleSendChat(

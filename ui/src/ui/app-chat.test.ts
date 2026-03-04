@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleRefineChatPrompt } from "./app-chat.ts";
+import {
+  handleAtPickerQueryChange,
+  handleAtPickerSelect,
+  handleRefineChatPrompt,
+} from "./app-chat.ts";
 
 type FakeHost = Parameters<typeof handleRefineChatPrompt>[0];
 
@@ -27,6 +31,9 @@ function createHost(overrides: Partial<FakeHost> = {}): FakeHost {
     quickToolRunning: false,
     quickResultText: null,
     quickResultError: null,
+    atPickerOpen: false,
+    atPickerQuery: "",
+    atPickerEntries: [],
     chatRefineLastOriginal: null,
     chatRefineLastAt: null,
     chatRefineRequestId: 0,
@@ -108,5 +115,43 @@ describe("handleRefineChatPrompt", () => {
     expect(host.chatRefineResultKind).toBe("error");
     expect(host.chatRefineResultMessage).toBe("Refine failed: upstream model error.");
     expect(host.chatMessage).toBe("draft prompt");
+  });
+});
+
+describe("@ file picker", () => {
+  it("loads entries when query changes", async () => {
+    const request = vi.fn().mockResolvedValue({ entries: ["src/", "src/index.ts"] });
+    const host = createHost({
+      client: { request } as unknown as FakeHost["client"],
+      sessionKey: "agent:main:new",
+    });
+
+    await handleAtPickerQueryChange(host, "src");
+
+    expect(request).toHaveBeenCalledWith("workspace.files.list", { agentId: "main", query: "src" });
+    expect(host.atPickerOpen).toBe(true);
+    expect(host.atPickerEntries).toEqual(["src/", "src/index.ts"]);
+  });
+
+  it("replaces latest @query on select", () => {
+    const host = createHost({ chatMessage: "check @src/inde now", atPickerQuery: "src/inde" });
+
+    handleAtPickerSelect(host, "src/index.ts");
+
+    expect(host.chatMessage).toBe("check @src/index.ts  now");
+    expect(host.atPickerOpen).toBe(false);
+  });
+
+  it("keeps picker open when list request fails", async () => {
+    const request = vi.fn().mockRejectedValue(new Error("unknown method"));
+    const host = createHost({
+      client: { request } as unknown as FakeHost["client"],
+      sessionKey: "agent:main:new",
+    });
+
+    await handleAtPickerQueryChange(host, "/root/");
+
+    expect(host.atPickerOpen).toBe(true);
+    expect(host.atPickerEntries).toEqual([]);
   });
 });

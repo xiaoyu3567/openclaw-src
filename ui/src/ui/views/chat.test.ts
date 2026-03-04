@@ -307,4 +307,50 @@ describe("chat view", () => {
     expect(onSend).not.toHaveBeenCalled();
     expect(shortcutEvent.defaultPrevented).toBe(true);
   });
+
+  it("opens @ picker on textarea input", () => {
+    const container = document.createElement("div");
+    const onAtPickerQueryChange = vi.fn();
+    render(
+      renderChat(
+        createProps({
+          connected: true,
+          onAtPickerQueryChange,
+        }),
+      ),
+      container,
+    );
+
+    const textarea = container.querySelector("textarea");
+    expect(textarea).not.toBeNull();
+    if (!textarea) {
+      return;
+    }
+    textarea.value = "hello @src";
+    textarea.selectionStart = textarea.value.length;
+    textarea.selectionEnd = textarea.value.length;
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect(onAtPickerQueryChange).toHaveBeenCalledWith("src");
+  });
+
+  it("closes @ picker on Escape", () => {
+    const container = document.createElement("div");
+    const onAtPickerClose = vi.fn();
+    render(
+      renderChat(
+        createProps({
+          connected: true,
+          onAtPickerClose,
+        }),
+      ),
+      container,
+    );
+
+    const textarea = container.querySelector("textarea");
+    expect(textarea).not.toBeNull();
+    textarea?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+
+    expect(onAtPickerClose).toHaveBeenCalledTimes(1);
+  });
 });
