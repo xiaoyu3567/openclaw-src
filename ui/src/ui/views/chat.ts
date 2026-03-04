@@ -54,9 +54,14 @@ export type ChatProps = {
   error: string | null;
   refineLoading?: boolean;
   refineStage?: "idle" | "checking_api" | "preparing_context" | "refining";
-  refineError?: string | null;
+  refineResultKind?: "success" | "info" | "error" | null;
+  refineResultMessage?: string | null;
   canRefine?: boolean;
   canUndoRefine?: boolean;
+  quickToolsOpen?: boolean;
+  quickToolRunning?: boolean;
+  quickResultText?: string | null;
+  quickResultError?: string | null;
   sessions: SessionsListResult | null;
   // Focus mode
   focusMode: boolean;
@@ -80,6 +85,11 @@ export type ChatProps = {
   onSend: () => void;
   onRefine?: () => void;
   onUndoRefine?: () => void;
+  onRunQuickSummary?: () => void;
+  onRunQuickTodos?: () => void;
+  onCopyQuickResult?: () => void;
+  onCloseQuickResult?: () => void;
+  onToggleQuickTools?: () => void;
   onAbort?: () => void;
   onQueueRemove: (id: string) => void;
   onNewSession: () => void;
@@ -352,13 +362,6 @@ export function renderChat(props: ChatProps) {
       ${props.disabledReason ? html`<div class="callout">${props.disabledReason}</div>` : nothing}
 
       ${props.error ? html`<div class="callout danger">${props.error}</div>` : nothing}
-      ${
-        props.refineError
-          ? html`<div class="callout ${props.refineError.startsWith("Refine completed") ? "" : "danger"}">
-              ${props.refineError}
-            </div>`
-          : nothing
-      }
 
       ${
         props.focusMode
@@ -512,6 +515,17 @@ export function renderChat(props: ChatProps) {
                   </div>`
                 : nothing
             }
+            ${
+              !props.refineLoading && props.refineResultMessage
+                ? html`<div
+                    class="chat-refine-inline-result chat-refine-inline-result--${props.refineResultKind ?? "info"}"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    ${props.refineResultMessage}
+                  </div>`
+                : nothing
+            }
           </label>
           <div class="chat-compose__actions">
             ${
@@ -528,6 +542,37 @@ export function renderChat(props: ChatProps) {
                     </button>
                   `
                 : html`
+                    <div class="chat-quick-tools">
+                      <button
+                        class="btn chat-tools-btn"
+                        ?disabled=${props.quickToolRunning}
+                        @click=${() => props.onToggleQuickTools?.()}
+                        aria-label="Quick tools"
+                        title="Quick tools"
+                      >
+                        ⚡
+                      </button>
+                      ${
+                        props.quickToolsOpen
+                          ? html`<div class="chat-quick-tools__menu">
+                              <button
+                                class="btn chat-quick-tools__item"
+                                ?disabled=${props.quickToolRunning}
+                                @click=${() => props.onRunQuickSummary?.()}
+                              >
+                                ${props.quickToolRunning ? "Running..." : "Summarize latest"}
+                              </button>
+                              <button
+                                class="btn chat-quick-tools__item"
+                                ?disabled=${props.quickToolRunning}
+                                @click=${() => props.onRunQuickTodos?.()}
+                              >
+                                ${props.quickToolRunning ? "Running..." : "Extract TODOs"}
+                              </button>
+                            </div>`
+                          : nothing
+                      }
+                    </div>
                     <button
                       class="btn chat-refine-btn"
                       ?disabled=${!props.canRefine || props.refineLoading}
@@ -562,6 +607,24 @@ export function renderChat(props: ChatProps) {
           </div>
         </div>
       </div>
+      ${
+        props.quickResultText || props.quickResultError
+          ? html`<div class="chat-quick-result" role="status" aria-live="polite">
+              <div class="chat-quick-result__header">Quick Result</div>
+              <pre class="chat-quick-result__body">${props.quickResultError ?? props.quickResultText}</pre>
+              <div class="chat-quick-result__actions">
+                <button
+                  class="btn"
+                  ?disabled=${!props.quickResultText}
+                  @click=${() => props.onCopyQuickResult?.()}
+                >
+                  Copy
+                </button>
+                <button class="btn" @click=${() => props.onCloseQuickResult?.()}>Close</button>
+              </div>
+            </div>`
+          : nothing
+      }
     </section>
   `;
 }

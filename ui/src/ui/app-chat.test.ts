@@ -20,7 +20,13 @@ function createHost(overrides: Partial<FakeHost> = {}): FakeHost {
     chatSending: false,
     chatRefineLoading: false,
     chatRefineStage: "idle",
-    chatRefineError: null,
+    chatRefineResultKind: null,
+    chatRefineResultMessage: null,
+    chatRefineResultTimer: null,
+    quickToolsOpen: false,
+    quickToolRunning: false,
+    quickResultText: null,
+    quickResultError: null,
     chatRefineLastOriginal: null,
     chatRefineLastAt: null,
     chatRefineRequestId: 0,
@@ -44,7 +50,8 @@ describe("handleRefineChatPrompt", () => {
     await handleRefineChatPrompt(host);
 
     expect(host.chatMessage).toBe("refined output");
-    expect(host.chatRefineError).toBeNull();
+    expect(host.chatRefineResultKind).toBe("success");
+    expect(host.chatRefineResultMessage).toBe("Refined.");
     expect(host.chatRefineLoading).toBe(false);
     expect(host.chatRefineStage).toBe("idle");
     expect(request).toHaveBeenNthCalledWith(1, "status", {});
@@ -65,7 +72,8 @@ describe("handleRefineChatPrompt", () => {
     await handleRefineChatPrompt(host);
 
     expect(host.chatMessage).toBe("draft prompt");
-    expect(host.chatRefineError).toBe("Refine completed: no significant changes.");
+    expect(host.chatRefineResultKind).toBe("info");
+    expect(host.chatRefineResultMessage).toBe("No significant changes.");
   });
 
   it("handles timeout as expected", async () => {
@@ -82,7 +90,8 @@ describe("handleRefineChatPrompt", () => {
     await vi.advanceTimersByTimeAsync(20_500);
     await run;
 
-    expect(host.chatRefineError).toBe("Refine failed: request timed out (20s).");
+    expect(host.chatRefineResultKind).toBe("error");
+    expect(host.chatRefineResultMessage).toBe("Refine failed: timeout (20s).");
     expect(host.chatRefineLoading).toBe(false);
     vi.useRealTimers();
   });
@@ -96,7 +105,8 @@ describe("handleRefineChatPrompt", () => {
 
     await handleRefineChatPrompt(host);
 
-    expect(host.chatRefineError).toBe("Refine failed: model run error.");
+    expect(host.chatRefineResultKind).toBe("error");
+    expect(host.chatRefineResultMessage).toBe("Refine failed: upstream model error.");
     expect(host.chatMessage).toBe("draft prompt");
   });
 });

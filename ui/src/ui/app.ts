@@ -16,7 +16,10 @@ import {
 } from "./app-channels.ts";
 import {
   handleAbortChat as handleAbortChatInternal,
+  handleCopyQuickResult as handleCopyQuickResultInternal,
   handleRefineChatPrompt as handleRefineChatPromptInternal,
+  handleRunQuickSummary as handleRunQuickSummaryInternal,
+  handleRunQuickTodos as handleRunQuickTodosInternal,
   handleSendChat as handleSendChatInternal,
   handleUndoRefineChatPrompt as handleUndoRefineChatPromptInternal,
   removeQueuedMessage as removeQueuedMessageInternal,
@@ -156,7 +159,13 @@ export class OpenClawApp extends LitElement {
   @state() chatQueue: ChatQueueItem[] = [];
   @state() chatRefineLoading = false;
   @state() chatRefineStage: "idle" | "checking_api" | "preparing_context" | "refining" = "idle";
-  @state() chatRefineError: string | null = null;
+  @state() chatRefineResultKind: "success" | "info" | "error" | null = null;
+  @state() chatRefineResultMessage: string | null = null;
+  @state() chatRefineResultTimer: number | null = null;
+  @state() quickToolsOpen = false;
+  @state() quickToolRunning = false;
+  @state() quickResultText: string | null = null;
+  @state() quickResultError: string | null = null;
   @state() chatRefineLastOriginal: string | null = null;
   @state() chatRefineLastAt: number | null = null;
   @state() chatRefineRequestId = 0;
@@ -540,6 +549,33 @@ export class OpenClawApp extends LitElement {
     handleUndoRefineChatPromptInternal(
       this as unknown as Parameters<typeof handleUndoRefineChatPromptInternal>[0],
     );
+  }
+
+  toggleQuickTools() {
+    this.quickToolsOpen = !this.quickToolsOpen;
+  }
+
+  async handleRunQuickSummary() {
+    await handleRunQuickSummaryInternal(
+      this as unknown as Parameters<typeof handleRunQuickSummaryInternal>[0],
+    );
+  }
+
+  async handleRunQuickTodos() {
+    await handleRunQuickTodosInternal(
+      this as unknown as Parameters<typeof handleRunQuickTodosInternal>[0],
+    );
+  }
+
+  async handleCopyQuickResult() {
+    await handleCopyQuickResultInternal(
+      this as unknown as Parameters<typeof handleCopyQuickResultInternal>[0],
+    );
+  }
+
+  handleCloseQuickResult() {
+    this.quickResultText = null;
+    this.quickResultError = null;
   }
 
   async handleWhatsAppStart(force: boolean) {

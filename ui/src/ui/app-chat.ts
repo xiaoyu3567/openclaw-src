@@ -22,7 +22,13 @@ export type ChatHost = {
   chatSending: boolean;
   chatRefineLoading: boolean;
   chatRefineStage: "idle" | "checking_api" | "preparing_context" | "refining";
-  chatRefineError: string | null;
+  chatRefineResultKind: "success" | "info" | "error" | null;
+  chatRefineResultMessage: string | null;
+  chatRefineResultTimer: number | null;
+  quickToolsOpen: boolean;
+  quickToolRunning: boolean;
+  quickResultText: string | null;
+  quickResultError: string | null;
   chatRefineLastOriginal: string | null;
   chatRefineLastAt: number | null;
   chatRefineRequestId: number;
@@ -215,21 +221,40 @@ function buildPromptRefineHistory(messages: unknown[]): PromptRefineHistoryEntry
 
 function normalizeRefineError(message: string): string {
   if (message.includes("timed out")) {
-    return "Refine failed: request timed out (20s).";
+    return "Refine failed: timeout (20s).";
   }
   if (message.includes("gateway not connected")) {
-    return "Refine failed: gateway not connected.";
+    return "Refine failed: gateway disconnected.";
   }
   if (message.includes("missing run id")) {
-    return "Refine failed: backend did not return run id.";
+    return "Refine failed: backend run init failed.";
   }
   if (message.includes("empty output")) {
-    return "Refine failed: model returned empty text.";
+    return "Refine failed: empty output.";
   }
   if (message.includes("model error")) {
-    return "Refine failed: model run error.";
+    return "Refine failed: upstream model error.";
   }
   return `Refine failed: ${message}`;
+}
+
+function setRefineResult(
+  host: ChatHost,
+  kind: "success" | "info" | "error",
+  message: string,
+  timeoutMs: number,
+) {
+  if (host.chatRefineResultTimer != null) {
+    window.clearTimeout(host.chatRefineResultTimer);
+    host.chatRefineResultTimer = null;
+  }
+  host.chatRefineResultKind = kind;
+  host.chatRefineResultMessage = message;
+  host.chatRefineResultTimer = window.setTimeout(() => {
+    host.chatRefineResultKind = null;
+    host.chatRefineResultMessage = null;
+    host.chatRefineResultTimer = null;
+  }, timeoutMs);
 }
 
 type PromptRefineResult = { refined?: string };
@@ -246,7 +271,12 @@ export async function handleRefineChatPrompt(host: ChatHost) {
   host.chatRefineRequestId = requestId;
   host.chatRefineLoading = true;
   host.chatRefineStage = "checking_api";
-  host.chatRefineError = null;
+  if (host.chatRefineResultTimer != null) {
+    window.clearTimeout(host.chatRefineResultTimer);
+    host.chatRefineResultTimer = null;
+  }
+  host.chatRefineResultKind = null;
+  host.chatRefineResultMessage = null;
   const original = host.chatMessage;
   host.chatRefineLastOriginal = original;
 
@@ -284,14 +314,15 @@ export async function handleRefineChatPrompt(host: ChatHost) {
       return;
     }
     if (refined.trim() === draft.trim()) {
-      host.chatRefineError = "Refine completed: no significant changes.";
+      setRefineResult(host, "info", "No significant changes.", 1800);
       return;
     }
     host.chatMessage = refined;
     host.chatRefineLastAt = Date.now();
+    setRefineResult(host, "success", "Refined.", 1800);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    host.chatRefineError = normalizeRefineError(message || "unknown error");
+    setRefineResult(host, "error", normalizeRefineError(message || "unknown error"), 1800);
   } finally {
     if (host.chatRefineRequestId === requestId) {
       host.chatRefineLoading = false;
@@ -308,7 +339,141 @@ export function handleUndoRefineChatPrompt(host: ChatHost) {
   host.chatMessage = previous;
   host.chatRefineLastOriginal = null;
   host.chatRefineLastAt = null;
-  host.chatRefineError = null;
+  if (host.chatRefineResultTimer != null) {
+    window.clearTimeout(host.chatRefineResultTimer);
+    host.chatRefineResultTimer = null;
+  }
+  host.chatRefineResultKind = null;
+  host.chatRefineResultMessage = null;
+}
+
+type AgentAck = { runId?: string };
+type AgentWaitResult = { status?: string };
+type ChatHistoryResult = { messages?: Array<Record<string, unknown>> };
+
+function extractAssistantText(messages: Array<Record<string, unknown>>): string {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if ((message?.role ?? "") !== "assistant") {
+      continue;
+    }
+    const text = messageTextFromContent(message.content).trim();
+    if (text) {
+      return text;
+    }
+  }
+  return "";
+}
+
+function normalizeQuickToolError(message: string): string {
+  if (message.includes("timed out")) {
+    return "Failed: timeout (10s).";
+  }
+  if (message.includes("gateway")) {
+    return "Failed: gateway unavailable.";
+  }
+  return `Failed: ${message}`;
+}
+
+async function runQuickTool(
+  host: ChatHost,
+  params: {
+    name: string;
+    promptHead: string[];
+    outputHint: string[];
+  },
+) {
+  if (!host.connected || !host.client || host.quickToolRunning) {
+    return;
+  }
+  host.quickToolRunning = true;
+  host.quickToolsOpen = false;
+  host.quickResultError = null;
+
+  try {
+    const recent = buildPromptRefineHistory(host.chatMessages)
+      .slice(-10)
+      .map((entry, index) => `${index + 1}. [${entry.role}] ${entry.text}`)
+      .join("\n");
+    const toolPrompt = [
+      ...params.promptHead,
+      "Output format:",
+      ...params.outputHint,
+      "Keep it concise and actionable.",
+      "Conversation:",
+      recent || "(empty)",
+    ].join("\n\n");
+
+    const tempSessionKey = `agent:main:quick-${params.name}:${Date.now()}`;
+    const ack = await host.client.request<AgentAck>("agent", {
+      message: toolPrompt,
+      sessionKey: tempSessionKey,
+      deliver: false,
+      idempotencyKey: `quick-${params.name}:${Date.now()}`,
+    });
+    const runId = typeof ack?.runId === "string" ? ack.runId : "";
+    if (!runId) {
+      throw new Error("missing run id");
+    }
+
+    const start = Date.now();
+    while (Date.now() - start < 10_000) {
+      const wait = await host.client.request<AgentWaitResult>("agent.wait", {
+        runId,
+        timeoutMs: 1200,
+      });
+      if (wait?.status === "ok") {
+        break;
+      }
+      if (wait?.status === "error") {
+        throw new Error("agent error");
+      }
+    }
+
+    const history = await host.client.request<ChatHistoryResult>("chat.history", {
+      sessionKey: tempSessionKey,
+      limit: 20,
+    });
+    const text = extractAssistantText(Array.isArray(history?.messages) ? history.messages : []);
+    if (!text) {
+      throw new Error("empty output");
+    }
+    host.quickResultText = text;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    host.quickResultError = normalizeQuickToolError(message);
+    host.quickResultText = null;
+  } finally {
+    host.quickToolRunning = false;
+  }
+}
+
+export async function handleRunQuickSummary(host: ChatHost) {
+  await runQuickTool(host, {
+    name: "summary",
+    promptHead: ["Summarize latest conversation for quick reading."],
+    outputHint: ["Summary", "- ...", "- ...", "- ..."],
+  });
+}
+
+export async function handleRunQuickTodos(host: ChatHost) {
+  await runQuickTool(host, {
+    name: "todos",
+    promptHead: ["Extract actionable TODO items from latest conversation."],
+    outputHint: ["TODO", "- [ ] ...", "- [ ] ...", "- [ ] ..."],
+  });
+}
+
+export async function handleCopyQuickResult(host: ChatHost) {
+  const text = host.quickResultText?.trim();
+  if (!text) {
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    host.quickResultError = "Failed: copy unavailable.";
+  }
 }
 
 export async function handleSendChat(

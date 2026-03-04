@@ -79,7 +79,13 @@ export type AppViewState = {
   chatQueue: ChatQueueItem[];
   chatRefineLoading: boolean;
   chatRefineStage: "idle" | "checking_api" | "preparing_context" | "refining";
-  chatRefineError: string | null;
+  chatRefineResultKind: "success" | "info" | "error" | null;
+  chatRefineResultMessage: string | null;
+  chatRefineResultTimer: number | null;
+  quickToolsOpen: boolean;
+  quickToolRunning: boolean;
+  quickResultText: string | null;
+  quickResultError: string | null;
   chatRefineLastOriginal: string | null;
   chatRefineLastAt: number | null;
   chatRefineRequestId: number;
@@ -344,6 +350,11 @@ export type AppViewState = {
   handleSendChat: (messageOverride?: string, opts?: { restoreDraft?: boolean }) => Promise<void>;
   handleRefineChatPrompt: () => Promise<void>;
   handleUndoRefineChatPrompt: () => void;
+  handleRunQuickSummary: () => Promise<void>;
+  handleRunQuickTodos: () => Promise<void>;
+  handleCopyQuickResult: () => Promise<void>;
+  handleCloseQuickResult: () => void;
+  toggleQuickTools: () => void;
   handleAbortChat: () => Promise<void>;
   removeQueuedMessage: (id: string) => void;
   handleChatScroll: (event: Event) => void;
