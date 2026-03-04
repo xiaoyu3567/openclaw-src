@@ -2,7 +2,18 @@
 
 set -euo pipefail
 
-REPO_RAW_BASE="https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts"
+RAW_BRANCH="main"
+
+resolve_raw_branch_from_args() {
+  local prev=""
+  for arg in "$@"; do
+    if [ "$prev" = "--branch" ]; then
+      RAW_BRANCH="$arg"
+      return
+    fi
+    prev="$arg"
+  done
+}
 
 usage() {
   cat <<'USAGE'
@@ -36,7 +47,10 @@ case "$os" in
     ;;
 esac
 
-printf "Detected OS: %s, dispatching to %s ...\n" "$os" "$target"
+resolve_raw_branch_from_args "$@"
+REPO_RAW_BASE="https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/${RAW_BRANCH}/scripts"
+
+printf "Detected OS: %s, dispatching to %s (branch: %s) ...\n" "$os" "$target" "$RAW_BRANCH"
 
 if ! command -v curl >/dev/null 2>&1; then
   printf "Error: curl is required but not found.\n" >&2
