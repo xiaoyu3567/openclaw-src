@@ -4,52 +4,39 @@
 
 `openclaw-src` 是基于 OpenClaw 的实用增强版，目标是让日常使用更顺手：会话管理更高效、thinking 状态更透明、异常恢复更可靠。
 
-当前分支 `chore/risk-hardening-p0` 在原有增强基础上，继续补齐了 Prompt Refine 工作流、移动端交互细节和测试闭环。
+当前分支 `feat/quick-tools-v1-p1p2` 在原有增强基础上，继续聚焦输入区体验、`@` 文件选择、工具入口交互与移动端一致性优化。
 
 ![Control UI 新特性预览 1](show1.png)
 
-## 2. 本分支相对 `main` 的实际改动
+## 2. 本分支相对 `main` 的用户可感知更新
 
-### 2.1 Session 控制交互（UI）
+### 2.1 输入框体验升级（更清爽、默认更紧凑）
 
-- 顶部会话控制支持创建（`+`）、删除（trash）、刷新
-- 创建支持完整 key / 短后缀 / 随机后缀
-- 删除支持序号、完整 key、尾部匹配
-- Chat 下拉显示 all sessions（不再 recent-only）
-- 原先依赖浏览器 `prompt/confirm/alert` 的流程改为内置对话框，移动端更稳定
+- 输入区视觉升级为更圆润、干净的卡片风格
+- 默认高度更紧凑，多行输入时自动扩展
+- 默认提示文案已移除，输入框保持空白
 
-### 2.2 Prompt Refine（新增）
+### 2.2 `@` 文件选择（最小可用）
 
-- 在输入区新增 `Refine` 按钮（位于 `Send` 左侧）
-- 行为：基于当前 session 上下文 + 当前输入优化 prompt，仅回填输入框，不自动发送
-- 状态流程：`1/3 Testing API -> 2/3 Organizing history -> 3/3 Optimizing prompt`
-- 超时保护：20s watchdog
-- 异常提示：timeout / gateway / model error / empty output
-- 无明显变化时提示：`Refine completed: no significant changes.`
-- thinking 中的交互切换：隐藏 `Refine`，显示 `Stop`
+- 在输入框输入 `@` 时，立即拉起文件候选选择框
+- 支持继续输入路径（如 `@/root/`），候选实时刷新
+- 选择候选后自动替换到输入内容
+- 支持 `Esc` 快速关闭候选框
 
-### 2.3 移动端体验（本轮重点）
+### 2.3 工具入口交互整理
 
-- `Refine` icon-only（`✨`），正方形，和 `Send` 同高，同一行
-- `Stop` 与 `Refine` 保持同规格按钮反馈
-- `Send` 自适应填充剩余宽度
-- refine loading 改为输入框底部短状态条，减少遮挡
+- `工具`（wrench）按钮用于弹出 quick tools 菜单
+- `+` 按钮当前为占位入口，点击显示内联 `Coming soon`（非弹窗，不打断输入）
 
-### 2.4 Gateway 能力补齐
+### 2.4 移动端体验一致性
 
-- 新增 `prompt.refine` 方法注册与 scope 接入
-- 统一通过 gateway 路径处理 refine 请求
+- 工具菜单定位与边界处理优化，减少遮挡与截断
+- 移动端按钮布局更紧凑，图标优先，单手操作更稳定
 
-### 2.5 测试与可维护性
+### 2.5 稳定性与验证
 
-- 新增 `app-chat` refine 逻辑测试（success / timeout / error / no significant changes）
-- 补充 chat 视图测试（thinking 时 Refine/Stop 切换、快捷键行为）
-- UI 测试环境补齐 `jsdom`
-
-### 2.6 安装脚本行为修正
-
-- 一键安装脚本写入：`update.checkOnStart = false`
-- 目标：减少顶部 Update available 提示干扰
+- 补充 `@` 触发、路径刷新、选择替换、`Esc` 关闭等测试
+- 保持发送、Refine、会话等主流程行为不变
 
 ## 3. 核心特性总览（当前分支）
 
@@ -103,5 +90,5 @@ iwr -useb https://raw.githubusercontent.com/xiaoyu3567/openclaw-src/main/scripts
 
 ## 5. 分支说明
 
-- 推荐开发分支：`chore/risk-hardening-p0`
-- 建议在该分支完成验证后再发 PR 合并到 `main`
+- 当前开发分支：`feat/quick-tools-v1-p1p2`
+- 建议在该分支完成验收后再合并到 `main`
