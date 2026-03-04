@@ -48,6 +48,24 @@ run_cmd() {
   "$@"
 }
 
+run_system_write_cmd() {
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf "[dry-run] %s\n" "$*"
+    return 0
+  fi
+
+  if [ "${NEED_SUDO_FOR_SYSTEM_WRITE:-0}" -eq 1 ]; then
+    if ! command -v sudo >/dev/null 2>&1; then
+      printf "Error: need sudo to write system OpenClaw dist, but sudo is unavailable.\n" >&2
+      exit 1
+    fi
+    sudo "$@"
+    return
+  fi
+
+  "$@"
+}
+
 wait_gateway_status_ready() {
   local attempts=${1:-30}
   local delay_sec=${2:-1}
@@ -251,6 +269,12 @@ if [ ! -d "$OPENCLAW_DIST" ]; then
   exit 1
 fi
 
+NEED_SUDO_FOR_SYSTEM_WRITE=0
+if [ ! -w "$OPENCLAW_DIST" ] || [ ! -w "$OPENCLAW_ROOT" ]; then
+  NEED_SUDO_FOR_SYSTEM_WRITE=1
+  log_step "INFO" "system dist path not writable; will use sudo for deploy copy"
+fi
+
 confirm_or_exit
 
 log_section "Step 2/7 - Update source"
@@ -285,10 +309,10 @@ log_step "OK" "backup_id=$BACKUP_ID"
 
 log_section "Step 5/7 - Deploy"
 if [ "$SCOPE" = "ui" ]; then
-  run_cmd mkdir -p "$TARGET_UI"
-  run_cmd rsync -a --delete "$REPO_ROOT/dist/control-ui/" "$TARGET_UI/"
+  run_system_write_cmd mkdir -p "$TARGET_UI"
+  run_system_write_cmd rsync -a --delete "$REPO_ROOT/dist/control-ui/" "$TARGET_UI/"
 else
-  run_cmd rsync -a --delete "$REPO_ROOT/dist/" "$OPENCLAW_DIST/"
+  run_system_write_cmd rsync -a --delete "$REPO_ROOT/dist/" "$OPENCLAW_DIST/"
 fi
 
 log_section "Step 6/7 - Restart gateway"
