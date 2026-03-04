@@ -34,6 +34,20 @@ require_cmd() {
   fi
 }
 
+run_npm_global() {
+  if [ "${EUID:-$(id -u)}" -eq 0 ]; then
+    npm "$@"
+    return
+  fi
+  if command -v sudo >/dev/null 2>&1; then
+    sudo npm "$@"
+    return
+  fi
+  printf "Error: global npm operation needs root privileges (sudo not found).\n" >&2
+  printf "Please install sudo or rerun this installer as root.\n" >&2
+  exit 1
+}
+
 read_required_from_tty() {
   local prompt=$1
   local value=""
@@ -117,7 +131,7 @@ uninstall_existing_openclaw() {
   pkill -f "openclaw-gateway" >/dev/null 2>&1 || true
   pkill -f "openclaw.*gateway --port 18789" >/dev/null 2>&1 || true
 
-  npm uninstall -g openclaw >/dev/null 2>&1 || true
+  run_npm_global uninstall -g openclaw >/dev/null 2>&1 || true
   hash -r 2>/dev/null || true
 
   if [ -d "$REPO_DIR" ]; then
@@ -323,7 +337,7 @@ printf "[3/9] Uninstalling existing OpenClaw (mandatory clean install)...\n"
 uninstall_existing_openclaw
 
 printf "[4/9] Installing OpenClaw %s...\n" "$OPENCLAW_VERSION"
-npm install -g "openclaw@${OPENCLAW_VERSION}" --omit=optional --registry="$OPENCLAW_REGISTRY"
+run_npm_global install -g "openclaw@${OPENCLAW_VERSION}" --omit=optional --registry="$OPENCLAW_REGISTRY"
 require_cmd openclaw
 
 printf "[5/9] Writing OpenClaw model/agent/usage config...\n"
