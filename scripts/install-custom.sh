@@ -57,4 +57,5 @@ if ! command -v curl >/dev/null 2>&1; then
   exit 1
 fi
 
-exec bash <(curl -fsSL "$REPO_RAW_BASE/$target") "$@"
+cache_buster="$(date +%s)"
+exec bash <(curl -fsSL "$REPO_RAW_BASE/$target?ts=$cache_buster") "$@"
