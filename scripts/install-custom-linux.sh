@@ -168,7 +168,7 @@ wait_gateway_status_ready() {
 
   for i in $(seq 1 "$attempts"); do
     out=$(openclaw gateway status 2>&1 || true)
-    if printf "%s" "$out" | grep -Eiq "Service unit not found|Service not installed|Could not find service|RPC probe: failed"; then
+    if printf "%s" "$out" | grep -Eiq "Service unit not found|Service not installed|Could not find service"; then
       sleep "$delay_sec"
       continue
     fi
