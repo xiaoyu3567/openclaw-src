@@ -378,7 +378,7 @@ async function runQuickTool(
   host.quickResultError = null;
 
   try {
-    const history = buildPromptRefineHistory(host.chatMessages).slice(-10);
+    const history = buildPromptRefineHistory(host.chatMessages).slice(-120);
     const res = await host.client.request<PromptQuickToolResult>("prompt.quick_tool", {
       sessionKey: host.sessionKey,
       tool: params.name,

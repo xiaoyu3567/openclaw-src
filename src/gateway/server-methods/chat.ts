@@ -221,6 +221,134 @@ function resolveAgentResponseText(result: unknown): string {
     .join("\n\n");
 }
 
+const QUICK_TOOL_RECENT_LIMIT = 20;
+const QUICK_TOOL_MAX_CONTEXT_CHARS = 7000;
+const QUICK_TOOL_CHUNK_TRIGGER_CHARS = 5200;
+const QUICK_TOOL_CHUNK_SIZE_CHARS = 1400;
+const QUICK_TOOL_CHUNK_COUNT = 4;
+
+function capQuickToolEntriesByChars(
+  entries: Array<{ role: string; text: string }>,
+  maxChars: number,
+): Array<{ role: string; text: string }> {
+  const selected: Array<{ role: string; text: string }> = [];
+  let used = 0;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    const line = `[${entry.role}] ${entry.text}`;
+    const len = line.length + 1;
+    if (used + len > maxChars) {
+      break;
+    }
+    selected.push(entry);
+    used += len;
+  }
+  return selected.toReversed();
+}
+
+function buildQuickToolChunkFallback(
+  entries: Array<{ role: string; text: string }>,
+): Array<{ role: string; text: string }> {
+  const fullText = entries.map((entry) => `[${entry.role}] ${entry.text}`).join("\n");
+  if (fullText.length <= QUICK_TOOL_CHUNK_TRIGGER_CHARS) {
+    return entries;
+  }
+  const chunks: Array<{ role: string; text: string }> = [];
+  for (
+    let offset = 0;
+    offset < fullText.length && chunks.length < QUICK_TOOL_CHUNK_COUNT;
+    offset += QUICK_TOOL_CHUNK_SIZE_CHARS
+  ) {
+    const segment = fullText.slice(offset, offset + QUICK_TOOL_CHUNK_SIZE_CHARS);
+    chunks.push({ role: "context", text: `Chunk ${chunks.length + 1}: ${segment}` });
+  }
+  return chunks;
+}
+
+function extractQuickToolAnchors(
+  olderHistory: Array<{ role: string; text: string }>,
+): Array<{ role: string; text: string }> {
+  const buckets = [
+    { role: "anchor", tag: "Goal", regex: /(目标|goal|objective|目的|scope|范围)/i },
+    { role: "anchor", tag: "Constraint", regex: /(约束|限制|must|必须|不要|不能|constraint)/i },
+    { role: "anchor", tag: "Decision", regex: /(决定|决策|adopt|chosen|选用|方案)/i },
+    { role: "anchor", tag: "TODO", regex: /(todo|待办|action item|next step|下一步)/i },
+    { role: "anchor", tag: "Open", regex: /(待确认|未决|blocker|风险|question|问题)/i },
+  ] as const;
+
+  const anchors: Array<{ role: string; text: string }> = [];
+  for (const bucket of buckets) {
+    const match = [...olderHistory].toReversed().find((entry) => bucket.regex.test(entry.text));
+    if (match) {
+      anchors.push({ role: bucket.role, text: `${bucket.tag}: ${match.text}` });
+    }
+  }
+  return anchors;
+}
+
+function buildQuickToolContext(
+  history: Array<{ role: string; text: string }>,
+): Array<{ role: string; text: string }> {
+  const recent = history.slice(-QUICK_TOOL_RECENT_LIMIT);
+  const older = history.slice(0, Math.max(0, history.length - QUICK_TOOL_RECENT_LIMIT));
+  const anchors = extractQuickToolAnchors(older);
+  const layered = [...anchors, ...recent];
+  const capped = capQuickToolEntriesByChars(layered, QUICK_TOOL_MAX_CONTEXT_CHARS);
+  return buildQuickToolChunkFallback(capped);
+}
+
+const QUICK_TOOL_MAP_CHUNK_SIZE = 1600;
+const QUICK_TOOL_MAP_MAX_CHUNKS = 6;
+
+function quickToolFormatHint(tool: "summary" | "todos"): string {
+  if (tool === "summary") {
+    return [
+      "Output format:",
+      "会话目标",
+      "- ...",
+      "关键决策",
+      "- ...",
+      "主要变更",
+      "- ...",
+      "风险与未决",
+      "- ...",
+      "下一步",
+      "- ...",
+    ].join("\n");
+  }
+  return [
+    "Output format:",
+    "已确认",
+    "- ...",
+    "待办（P0）",
+    "- [ ] ...",
+    "待办（P1）",
+    "- [ ] ...",
+    "待办（P2）",
+    "- [ ] ...",
+    "阻塞/依赖",
+    "- ...",
+  ].join("\n");
+}
+
+function buildQuickToolMapChunks(history: Array<{ role: string; text: string }>): string[] {
+  const full = history
+    .map((entry, index) => `${index + 1}. [${entry.role}] ${entry.text}`)
+    .join("\n");
+  if (!full.trim()) {
+    return ["(no recent context)"];
+  }
+  const chunks: string[] = [];
+  for (
+    let offset = 0;
+    offset < full.length && chunks.length < QUICK_TOOL_MAP_MAX_CHUNKS;
+    offset += QUICK_TOOL_MAP_CHUNK_SIZE
+  ) {
+    chunks.push(full.slice(offset, offset + QUICK_TOOL_MAP_CHUNK_SIZE));
+  }
+  return chunks;
+}
+
 async function cleanupEphemeralSession(sessionKey: string, sessionAgentId: string): Promise<void> {
   try {
     const temp = loadSessionEntry(sessionKey);
@@ -716,6 +844,23 @@ export const chatHandlers: GatewayRequestHandlers = {
       draft,
     ].join("\n\n");
 
+    try {
+      console.log(
+        JSON.stringify({
+          subsystem: "gateway/refine-debug",
+          method: "prompt.refine",
+          sessionKey,
+          style,
+          draft,
+          historyCount: history.length,
+          history,
+          refinePrompt,
+        }),
+      );
+    } catch {
+      // no-op debug logging
+    }
+
     const { cfg } = loadSessionEntry(sessionKey);
     const sessionAgentId = resolveSessionAgentId({ sessionKey, config: cfg });
     const refineSessionKey = `agent:${sessionAgentId}:prompt-refine:${Date.now()}`;
@@ -747,84 +892,131 @@ export const chatHandlers: GatewayRequestHandlers = {
     }
   },
   "prompt.quick_tool": async ({ params, respond }) => {
-    const sessionKey =
-      typeof (params as { sessionKey?: unknown }).sessionKey === "string"
-        ? (params as { sessionKey: string }).sessionKey.trim()
-        : "";
-    const tool =
-      typeof (params as { tool?: unknown }).tool === "string"
-        ? (params as { tool: string }).tool.trim().toLowerCase()
-        : "";
-    const history = normalizeRefineHistoryEntries((params as { history?: unknown }).history).slice(
-      -12,
-    );
-    if (!sessionKey) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "sessionKey is required"));
-      return;
-    }
-    if (tool !== "summary" && tool !== "todos") {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unsupported tool"));
-      return;
-    }
-
-    const historyText = history.length
-      ? history.map((entry, index) => `${index + 1}. [${entry.role}] ${entry.text}`).join("\n")
-      : "(no recent context)";
-
-    const instruction =
-      tool === "summary"
-        ? [
-            "Task: Summarize latest conversation for quick reading.",
-            "Output format:",
-            "Summary",
-            "- ...",
-            "- ...",
-            "- ...",
-          ].join("\n")
-        : [
-            "Task: Extract actionable TODO items from latest conversation.",
-            "Output format:",
-            "TODO",
-            "- [ ] ...",
-            "- [ ] ...",
-            "- [ ] ...",
-          ].join("\n");
-
-    const toolPrompt = [
-      instruction,
-      "Keep it concise and actionable.",
-      "Recent session context:",
-      historyText,
-    ].join("\n\n");
-
-    const { cfg } = loadSessionEntry(sessionKey);
-    const sessionAgentId = resolveSessionAgentId({ sessionKey, config: cfg });
-    const quickSessionKey = `agent:${sessionAgentId}:prompt-quick-tool:${Date.now()}`;
-
     try {
-      const result = await agentCommand(
-        {
-          message: toolPrompt,
-          sessionKey: quickSessionKey,
-          deliver: false,
-        },
-        defaultRuntime,
-        createDefaultDeps(),
-      );
-      const output = resolveAgentResponseText(result).trim();
-      if (!output) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.UNAVAILABLE, "quick tool returned empty output"),
-        );
+      const sessionKey =
+        typeof (params as { sessionKey?: unknown }).sessionKey === "string"
+          ? (params as { sessionKey: string }).sessionKey.trim()
+          : "";
+      const toolRaw =
+        typeof (params as { tool?: unknown }).tool === "string"
+          ? (params as { tool: string }).tool.trim().toLowerCase()
+          : "";
+      const tool = toolRaw === "summary" || toolRaw === "todos" ? toolRaw : "";
+      const rawHistory = normalizeRefineHistoryEntries((params as { history?: unknown }).history);
+      const contextHistory = buildQuickToolContext(rawHistory);
+      if (!sessionKey) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "sessionKey is required"));
         return;
       }
-      respond(true, { output });
+      if (!tool) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unsupported tool"));
+        return;
+      }
+
+      const contextHistoryText = contextHistory.length
+        ? contextHistory
+            .map((entry, index) => `${index + 1}. [${entry.role}] ${entry.text}`)
+            .join("\n")
+        : "(no recent context)";
+
+      const { cfg } = loadSessionEntry(sessionKey);
+      const sessionAgentId = resolveSessionAgentId({ sessionKey, config: cfg });
+
+      const chunkTexts = buildQuickToolMapChunks(rawHistory);
+      const mapSummaries: string[] = [];
+      for (let index = 0; index < chunkTexts.length; index += 1) {
+        const chunk = chunkTexts[index] ?? "";
+        const mapPrompt = [
+          "Task: extract key points from this conversation chunk.",
+          "Focus on goals, constraints, decisions, todos, and unresolved items.",
+          "Output concise bullet points only.",
+          `Chunk ${index + 1}/${chunkTexts.length}:`,
+          chunk,
+        ].join("\n\n");
+        const mapSessionKey = `agent:${sessionAgentId}:prompt-quick-map:${Date.now()}:${index}`;
+        try {
+          const mapResult = await agentCommand(
+            {
+              message: mapPrompt,
+              sessionKey: mapSessionKey,
+              deliver: false,
+            },
+            defaultRuntime,
+            createDefaultDeps(),
+          );
+          const summary = resolveAgentResponseText(mapResult).trim();
+          if (summary) {
+            mapSummaries.push(`Chunk ${index + 1}:\n${summary}`);
+          }
+        } finally {
+          await cleanupEphemeralSession(mapSessionKey, sessionAgentId);
+        }
+      }
+
+      const mapSummaryText = mapSummaries.length
+        ? mapSummaries.join("\n\n")
+        : "(no chunk summaries)";
+
+      const reducePrompt = [
+        tool === "summary"
+          ? "Task: produce a complete session summary from chunk summaries and recent context."
+          : "Task: produce complete actionable TODO extraction from chunk summaries and recent context.",
+        quickToolFormatHint(tool),
+        "Use chunk summaries as global context, and recent context for latest details.",
+        "Chunk summaries:",
+        mapSummaryText,
+        "Recent context:",
+        contextHistoryText,
+      ].join("\n\n");
+
+      try {
+        console.log(
+          JSON.stringify({
+            subsystem: "gateway/quick-tool-debug",
+            method: "prompt.quick_tool",
+            sessionKey,
+            tool,
+            historyCount: rawHistory.length,
+            history: rawHistory,
+            mapChunkCount: chunkTexts.length,
+            mapSummaries,
+            toolPrompt: reducePrompt,
+          }),
+        );
+      } catch {
+        // no-op debug logging
+      }
+
+      const reduceSessionKey = `agent:${sessionAgentId}:prompt-quick-tool:${Date.now()}`;
+      try {
+        const result = await agentCommand(
+          {
+            message: reducePrompt,
+            sessionKey: reduceSessionKey,
+            deliver: false,
+          },
+          defaultRuntime,
+          createDefaultDeps(),
+        );
+        const output = resolveAgentResponseText(result).trim();
+        if (!output) {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.UNAVAILABLE, "quick tool returned empty output"),
+          );
+          return;
+        }
+        respond(true, { output });
+      } catch (err) {
+        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+      } finally {
+        await cleanupEphemeralSession(reduceSessionKey, sessionAgentId);
+      }
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
-    } finally {
-      await cleanupEphemeralSession(quickSessionKey, sessionAgentId);
+      const detail =
+        err instanceof Error ? `${err.name}: ${err.message}\n${err.stack ?? ""}` : String(err);
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, detail));
     }
   },
   "chat.abort": ({ params, respond, context }) => {
