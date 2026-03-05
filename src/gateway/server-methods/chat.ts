@@ -221,6 +221,32 @@ function resolveAgentResponseText(result: unknown): string {
     .join("\n\n");
 }
 
+async function cleanupEphemeralSession(sessionKey: string, sessionAgentId: string): Promise<void> {
+  try {
+    const temp = loadSessionEntry(sessionKey);
+    if (temp.storePath) {
+      await updateSessionStore(temp.storePath, (store) => {
+        delete store[temp.canonicalKey];
+        return null;
+      });
+    }
+    const sessionId = temp.entry?.sessionId;
+    if (sessionId) {
+      const transcriptPath = resolveTranscriptPath({
+        sessionId,
+        storePath: temp.storePath,
+        sessionFile: temp.entry?.sessionFile,
+        agentId: sessionAgentId,
+      });
+      if (transcriptPath) {
+        fs.rmSync(transcriptPath, { force: true });
+      }
+    }
+  } catch {
+    // best-effort cleanup
+  }
+}
+
 function normalizeRefineHistoryEntries(history: unknown): Array<{ role: string; text: string }> {
   if (!Array.isArray(history)) {
     return [];
@@ -717,29 +743,88 @@ export const chatHandlers: GatewayRequestHandlers = {
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     } finally {
-      try {
-        const temp = loadSessionEntry(refineSessionKey);
-        if (temp.storePath) {
-          await updateSessionStore(temp.storePath, (store) => {
-            delete store[temp.canonicalKey];
-            return null;
-          });
-        }
-        const sessionId = temp.entry?.sessionId;
-        if (sessionId) {
-          const transcriptPath = resolveTranscriptPath({
-            sessionId,
-            storePath: temp.storePath,
-            sessionFile: temp.entry?.sessionFile,
-            agentId: sessionAgentId,
-          });
-          if (transcriptPath) {
-            fs.rmSync(transcriptPath, { force: true });
-          }
-        }
-      } catch {
-        // best-effort cleanup
+      await cleanupEphemeralSession(refineSessionKey, sessionAgentId);
+    }
+  },
+  "prompt.quick_tool": async ({ params, respond }) => {
+    const sessionKey =
+      typeof (params as { sessionKey?: unknown }).sessionKey === "string"
+        ? (params as { sessionKey: string }).sessionKey.trim()
+        : "";
+    const tool =
+      typeof (params as { tool?: unknown }).tool === "string"
+        ? (params as { tool: string }).tool.trim().toLowerCase()
+        : "";
+    const history = normalizeRefineHistoryEntries((params as { history?: unknown }).history).slice(
+      -12,
+    );
+    if (!sessionKey) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "sessionKey is required"));
+      return;
+    }
+    if (tool !== "summary" && tool !== "todos") {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unsupported tool"));
+      return;
+    }
+
+    const historyText = history.length
+      ? history.map((entry, index) => `${index + 1}. [${entry.role}] ${entry.text}`).join("\n")
+      : "(no recent context)";
+
+    const instruction =
+      tool === "summary"
+        ? [
+            "Task: Summarize latest conversation for quick reading.",
+            "Output format:",
+            "Summary",
+            "- ...",
+            "- ...",
+            "- ...",
+          ].join("\n")
+        : [
+            "Task: Extract actionable TODO items from latest conversation.",
+            "Output format:",
+            "TODO",
+            "- [ ] ...",
+            "- [ ] ...",
+            "- [ ] ...",
+          ].join("\n");
+
+    const toolPrompt = [
+      instruction,
+      "Keep it concise and actionable.",
+      "Recent session context:",
+      historyText,
+    ].join("\n\n");
+
+    const { cfg } = loadSessionEntry(sessionKey);
+    const sessionAgentId = resolveSessionAgentId({ sessionKey, config: cfg });
+    const quickSessionKey = `agent:${sessionAgentId}:prompt-quick-tool:${Date.now()}`;
+
+    try {
+      const result = await agentCommand(
+        {
+          message: toolPrompt,
+          sessionKey: quickSessionKey,
+          deliver: false,
+        },
+        defaultRuntime,
+        createDefaultDeps(),
+      );
+      const output = resolveAgentResponseText(result).trim();
+      if (!output) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, "quick tool returned empty output"),
+        );
+        return;
       }
+      respond(true, { output });
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    } finally {
+      await cleanupEphemeralSession(quickSessionKey, sessionAgentId);
     }
   },
   "chat.abort": ({ params, respond, context }) => {

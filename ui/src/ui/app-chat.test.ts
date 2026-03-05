@@ -3,6 +3,7 @@ import {
   handleAtPickerQueryChange,
   handleAtPickerSelect,
   handleRefineChatPrompt,
+  handleRunQuickSummary,
 } from "./app-chat.ts";
 
 type FakeHost = Parameters<typeof handleRefineChatPrompt>[0];
@@ -115,6 +116,25 @@ describe("handleRefineChatPrompt", () => {
     expect(host.chatRefineResultKind).toBe("error");
     expect(host.chatRefineResultMessage).toBe("Refine failed: upstream model error.");
     expect(host.chatMessage).toBe("draft prompt");
+  });
+});
+
+describe("quick tools rpc", () => {
+  it("uses prompt.quick_tool single rpc for summary", async () => {
+    const request = vi.fn().mockResolvedValue({ output: "Summary\n- one" });
+    const host = createHost({
+      client: { request } as unknown as FakeHost["client"],
+      sessionKey: "agent:main:new",
+      chatMessages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+    });
+
+    await handleRunQuickSummary(host);
+
+    expect(request).toHaveBeenCalledWith(
+      "prompt.quick_tool",
+      expect.objectContaining({ sessionKey: "agent:main:new", tool: "summary" }),
+    );
+    expect(host.quickResultText).toContain("Summary");
   });
 });
 

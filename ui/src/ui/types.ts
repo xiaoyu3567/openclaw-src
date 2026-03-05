@@ -477,6 +477,10 @@ export type WorkspaceFilesListResult = {
   entries: string[];
 };
 
+export type PromptQuickToolResult = {
+  output: string;
+};
+
 export type {
   CostUsageDailyEntry,
   CostUsageSummary,

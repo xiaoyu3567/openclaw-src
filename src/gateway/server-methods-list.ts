@@ -102,6 +102,7 @@ const BASE_METHODS = [
   "chat.abort",
   "chat.send",
   "prompt.refine",
+  "prompt.quick_tool",
 ];
 
 export function listGatewayMethods(): string[] {

@@ -100,6 +100,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "chat.send",
     "chat.abort",
     "prompt.refine",
+    "prompt.quick_tool",
     "browser.request",
     "push.test",
     "usage.provider.config.upsert",

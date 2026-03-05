@@ -7,7 +7,11 @@ import { abortChatRun, loadChatHistory, sendChatMessage } from "./controllers/ch
 import { loadSessions } from "./controllers/sessions.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import { normalizeBasePath } from "./navigation.ts";
-import type { PromptRefineHistoryEntry, WorkspaceFilesListResult } from "./types.ts";
+import type {
+  PromptQuickToolResult,
+  PromptRefineHistoryEntry,
+  WorkspaceFilesListResult,
+} from "./types.ts";
 import type { ChatAttachment, ChatQueueItem } from "./ui-types.ts";
 import { generateUUID } from "./uuid.ts";
 
@@ -350,24 +354,6 @@ export function handleUndoRefineChatPrompt(host: ChatHost) {
   host.chatRefineResultMessage = null;
 }
 
-type AgentAck = { runId?: string };
-type AgentWaitResult = { status?: string };
-type ChatHistoryResult = { messages?: Array<Record<string, unknown>> };
-
-function extractAssistantText(messages: Array<Record<string, unknown>>): string {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if ((message?.role ?? "") !== "assistant") {
-      continue;
-    }
-    const text = messageTextFromContent(message.content).trim();
-    if (text) {
-      return text;
-    }
-  }
-  return "";
-}
-
 function normalizeQuickToolError(message: string): string {
   if (message.includes("timed out")) {
     return "Failed: timeout (10s).";
@@ -381,9 +367,7 @@ function normalizeQuickToolError(message: string): string {
 async function runQuickTool(
   host: ChatHost,
   params: {
-    name: string;
-    promptHead: string[];
-    outputHint: string[];
+    name: "summary" | "todos";
   },
 ) {
   if (!host.connected || !host.client || host.quickToolRunning) {
@@ -394,50 +378,13 @@ async function runQuickTool(
   host.quickResultError = null;
 
   try {
-    const recent = buildPromptRefineHistory(host.chatMessages)
-      .slice(-10)
-      .map((entry, index) => `${index + 1}. [${entry.role}] ${entry.text}`)
-      .join("\n");
-    const toolPrompt = [
-      ...params.promptHead,
-      "Output format:",
-      ...params.outputHint,
-      "Keep it concise and actionable.",
-      "Conversation:",
-      recent || "(empty)",
-    ].join("\n\n");
-
-    const tempSessionKey = `agent:main:quick-${params.name}:${Date.now()}`;
-    const ack = await host.client.request<AgentAck>("agent", {
-      message: toolPrompt,
-      sessionKey: tempSessionKey,
-      deliver: false,
-      idempotencyKey: `quick-${params.name}:${Date.now()}`,
+    const history = buildPromptRefineHistory(host.chatMessages).slice(-10);
+    const res = await host.client.request<PromptQuickToolResult>("prompt.quick_tool", {
+      sessionKey: host.sessionKey,
+      tool: params.name,
+      history,
     });
-    const runId = typeof ack?.runId === "string" ? ack.runId : "";
-    if (!runId) {
-      throw new Error("missing run id");
-    }
-
-    const start = Date.now();
-    while (Date.now() - start < 10_000) {
-      const wait = await host.client.request<AgentWaitResult>("agent.wait", {
-        runId,
-        timeoutMs: 1200,
-      });
-      if (wait?.status === "ok") {
-        break;
-      }
-      if (wait?.status === "error") {
-        throw new Error("agent error");
-      }
-    }
-
-    const history = await host.client.request<ChatHistoryResult>("chat.history", {
-      sessionKey: tempSessionKey,
-      limit: 20,
-    });
-    const text = extractAssistantText(Array.isArray(history?.messages) ? history.messages : []);
+    const text = typeof res?.output === "string" ? res.output.trim() : "";
     if (!text) {
       throw new Error("empty output");
     }
@@ -452,19 +399,11 @@ async function runQuickTool(
 }
 
 export async function handleRunQuickSummary(host: ChatHost) {
-  await runQuickTool(host, {
-    name: "summary",
-    promptHead: ["Summarize latest conversation for quick reading."],
-    outputHint: ["Summary", "- ...", "- ...", "- ..."],
-  });
+  await runQuickTool(host, { name: "summary" });
 }
 
 export async function handleRunQuickTodos(host: ChatHost) {
-  await runQuickTool(host, {
-    name: "todos",
-    promptHead: ["Extract actionable TODO items from latest conversation."],
-    outputHint: ["TODO", "- [ ] ...", "- [ ] ...", "- [ ] ..."],
-  });
+  await runQuickTool(host, { name: "todos" });
 }
 
 export async function handleCopyQuickResult(host: ChatHost) {
