@@ -101,6 +101,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "chat.abort",
     "prompt.refine",
     "prompt.quick_tool",
+    "workspace.files.upload",
     "browser.request",
     "push.test",
     "usage.provider.config.upsert",

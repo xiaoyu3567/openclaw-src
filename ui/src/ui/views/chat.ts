@@ -62,6 +62,9 @@ export type ChatProps = {
   quickToolRunning?: boolean;
   quickResultText?: string | null;
   quickResultError?: string | null;
+  uploadRunning?: boolean;
+  uploadProgress?: number;
+  uploadError?: string | null;
   atPickerOpen?: boolean;
   atPickerQuery?: string;
   atPickerEntries?: string[];
@@ -92,6 +95,7 @@ export type ChatProps = {
   onRunQuickTodos?: () => void;
   onCopyQuickResult?: () => void;
   onCloseQuickResult?: () => void;
+  onUploadFile?: (file: File) => void;
   onAtPickerQueryChange?: (query: string) => void;
   onAtPickerSelect?: (entry: string) => void;
   onAtPickerClose?: () => void;
@@ -226,7 +230,7 @@ function handlePaste(e: ClipboardEvent, props: ChatProps) {
   }
 }
 
-function showPlusComingSoon(event: Event) {
+function openUploadPicker(event: Event) {
   const trigger = event.currentTarget as HTMLElement | null;
   if (!trigger) {
     return;
@@ -235,20 +239,20 @@ function showPlusComingSoon(event: Event) {
   if (!host) {
     return;
   }
+  const input = host.querySelector(".chat-plus-picker__input");
+  input?.click();
+}
 
-  const existing = host.querySelector(".chat-plus-inline-tip");
-  if (existing) {
-    existing.classList.remove("chat-plus-inline-tip--fade");
-    window.setTimeout(() => existing.classList.add("chat-plus-inline-tip--fade"), 10);
+function onUploadFileChosen(event: Event, props: ChatProps) {
+  const input = event.currentTarget as HTMLInputElement | null;
+  const file = input?.files?.[0];
+  if (!file) {
     return;
   }
-
-  const tip = document.createElement("span");
-  tip.className = "chat-plus-inline-tip";
-  tip.textContent = "Coming soon";
-  host.appendChild(tip);
-  window.setTimeout(() => tip.classList.add("chat-plus-inline-tip--fade"), 1200);
-  window.setTimeout(() => tip.remove(), 2000);
+  props.onUploadFile?.(file);
+  if (input) {
+    input.value = "";
+  }
 }
 
 function renderRefineStageLabel(stage: ChatProps["refineStage"]): string {
@@ -610,14 +614,19 @@ export function renderChat(props: ChatProps) {
                   `
                 : html`
                     <div class="chat-plus-picker">
+                      <input
+                        class="chat-plus-picker__input"
+                        type="file"
+                        @change=${(event: Event) => onUploadFileChosen(event, props)}
+                      />
                       <button
                         class="btn chat-toolbar-icon-btn chat-toolbar-icon-btn--plus"
-                        ?disabled=${props.quickToolRunning}
-                        @click=${(event: Event) => showPlusComingSoon(event)}
-                        aria-label="More tools"
-                        title="Coming soon"
+                        ?disabled=${props.quickToolRunning || props.uploadRunning}
+                        @click=${(event: Event) => openUploadPicker(event)}
+                        aria-label="Upload file"
+                        title="Upload file"
                       >
-                        <span>+</span>
+                        <span>${props.uploadRunning ? `${Math.max(1, Math.round(props.uploadProgress ?? 0))}%` : "+"}</span>
                       </button>
                     </div>
                     <div class="chat-quick-tools chat-quick-tools--picker">
@@ -676,6 +685,15 @@ export function renderChat(props: ChatProps) {
                     }
                   `
             }
+            ${
+              props.uploadRunning
+                ? html`<div class="chat-upload-progress" role="status" aria-live="polite">
+                    <div class="chat-upload-progress__bar">
+                      <span style=${`width:${Math.max(1, Math.min(100, Math.round(props.uploadProgress ?? 0)))}%`}></span>
+                    </div>
+                  </div>`
+                : nothing
+            }
             <button
               class="btn chat-send-circle-btn"
               ?disabled=${!props.connected}
@@ -688,6 +706,11 @@ export function renderChat(props: ChatProps) {
           </div>
         </div>
       </div>
+      ${
+        props.uploadError
+          ? html`<div class="chat-upload-error" role="alert">${props.uploadError}</div>`
+          : nothing
+      }
       ${
         props.quickResultText || props.quickResultError
           ? html`<div class="chat-quick-result" role="status" aria-live="polite">

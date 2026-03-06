@@ -477,6 +477,16 @@ export type WorkspaceFilesListResult = {
   entries: string[];
 };
 
+export type WorkspaceFilesUploadResult = {
+  ok: true;
+  agentId: string;
+  workspace: string;
+  fileName: string;
+  savedPath: string;
+  relativePath: string;
+  size: number;
+};
+
 export type PromptQuickToolResult = {
   output: string;
 };

@@ -531,28 +531,8 @@
   display: inline-flex;
 }
 
-.chat-plus-inline-tip {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  transform: translateX(-50%);
-  white-space: nowrap;
-  font-size: 12px;
-  line-height: 1;
-  padding: 6px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16);
-  pointer-events: none;
-  opacity: 0.98;
-}
-
-.chat-plus-inline-tip--fade {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-2px);
-  transition: opacity 0.8s ease, transform 0.8s ease;
+.chat-plus-picker__input {
+  display: none;
 }
 
 .chat-toolbar-icon-btn--plus {
@@ -601,6 +581,32 @@
 .chat-toolbar-pill-btn__icon svg {
   width: 14px;
   height: 14px;
+}
+
+.chat-upload-progress {
+  width: 64px;
+  min-width: 64px;
+}
+
+.chat-upload-progress__bar {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.28);
+  overflow: hidden;
+}
+
+.chat-upload-progress__bar span {
+  display: block;
+  height: 100%;
+  background: #22c55e;
+  transition: width 0.12s ease;
+}
+
+.chat-upload-error {
+  margin-top: 8px;
+  color: #ef4444;
+  font-size: 12px;
 }
 
 .chat-send-circle-btn {

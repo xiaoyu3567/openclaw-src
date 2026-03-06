@@ -48,6 +48,7 @@ const BASE_METHODS = [
   "agents.files.get",
   "agents.files.set",
   "workspace.files.list",
+  "workspace.files.upload",
   "skills.status",
   "skills.bins",
   "skills.install",

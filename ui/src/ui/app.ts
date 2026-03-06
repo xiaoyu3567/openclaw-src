@@ -24,6 +24,7 @@ import {
   handleRunQuickSummary as handleRunQuickSummaryInternal,
   handleRunQuickTodos as handleRunQuickTodosInternal,
   handleSendChat as handleSendChatInternal,
+  handleUploadFile as handleUploadFileInternal,
   handleUndoRefineChatPrompt as handleUndoRefineChatPromptInternal,
   removeQueuedMessage as removeQueuedMessageInternal,
 } from "./app-chat.ts";
@@ -169,6 +170,9 @@ export class OpenClawApp extends LitElement {
   @state() quickToolRunning = false;
   @state() quickResultText: string | null = null;
   @state() quickResultError: string | null = null;
+  @state() chatUploadRunning = false;
+  @state() chatUploadProgress = 0;
+  @state() chatUploadError: string | null = null;
   @state() atPickerOpen = false;
   @state() atPickerQuery = "";
   @state() atPickerEntries: string[] = [];
@@ -582,6 +586,13 @@ export class OpenClawApp extends LitElement {
   handleCloseQuickResult() {
     this.quickResultText = null;
     this.quickResultError = null;
+  }
+
+  async handleUploadFile(file: File) {
+    await handleUploadFileInternal(
+      this as unknown as Parameters<typeof handleUploadFileInternal>[0],
+      file,
+    );
   }
 
   async handleAtPickerQueryChange(query: string) {

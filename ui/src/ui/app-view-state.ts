@@ -86,6 +86,9 @@ export type AppViewState = {
   quickToolRunning: boolean;
   quickResultText: string | null;
   quickResultError: string | null;
+  chatUploadRunning: boolean;
+  chatUploadProgress: number;
+  chatUploadError: string | null;
   atPickerOpen: boolean;
   atPickerQuery: string;
   atPickerEntries: string[];

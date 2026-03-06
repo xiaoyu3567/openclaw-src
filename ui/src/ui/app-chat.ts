@@ -11,6 +11,7 @@ import type {
   PromptQuickToolResult,
   PromptRefineHistoryEntry,
   WorkspaceFilesListResult,
+  WorkspaceFilesUploadResult,
 } from "./types.ts";
 import type { ChatAttachment, ChatQueueItem } from "./ui-types.ts";
 import { generateUUID } from "./uuid.ts";
@@ -33,6 +34,9 @@ export type ChatHost = {
   quickToolRunning: boolean;
   quickResultText: string | null;
   quickResultError: string | null;
+  chatUploadRunning: boolean;
+  chatUploadProgress: number;
+  chatUploadError: string | null;
   atPickerOpen: boolean;
   atPickerQuery: string;
   atPickerEntries: string[];
@@ -415,6 +419,96 @@ export async function handleCopyQuickResult(host: ChatHost) {
     await navigator.clipboard.writeText(text);
   } catch {
     host.quickResultError = "Failed: copy unavailable.";
+  }
+}
+
+function readFileAsBase64(
+  file: File,
+  onProgress?: (progress: number) => void,
+): Promise<{ contentBase64: string; mimeType: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("error", () => reject(new Error("failed to read file")));
+    reader.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) {
+        return;
+      }
+      const ratio = Math.min(1, Math.max(0, event.loaded / event.total));
+      onProgress?.(Math.round(ratio * 60));
+    });
+    reader.addEventListener("load", () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error("invalid file data"));
+        return;
+      }
+      const match = /^data:([^;]+);base64,(.+)$/.exec(reader.result);
+      if (!match) {
+        reject(new Error("invalid file data"));
+        return;
+      }
+      resolve({ mimeType: match[1] || "application/octet-stream", contentBase64: match[2] });
+    });
+    reader.readAsDataURL(file);
+  });
+}
+
+function parseUploadError(err: unknown): string {
+  if (err instanceof Error) {
+    const normalized = err.message.replace(/^Error:\s*/i, "").trim();
+    return normalized || "Upload failed";
+  }
+  if (typeof err === "string") {
+    const normalized = err.replace(/^Error:\s*/i, "").trim();
+    return normalized || "Upload failed";
+  }
+  return "Upload failed";
+}
+
+export async function handleUploadFile(host: ChatHost, file: File) {
+  if (!host.connected || !host.client) {
+    return;
+  }
+  host.chatUploadRunning = true;
+  host.chatUploadProgress = 1;
+  host.chatUploadError = null;
+
+  let uploadProgressTimer: number | null = null;
+  try {
+    const parsed = await readFileAsBase64(file, (progress) => {
+      host.chatUploadProgress = Math.max(host.chatUploadProgress, progress);
+    });
+    host.chatUploadProgress = Math.max(host.chatUploadProgress, 65);
+
+    uploadProgressTimer = window.setInterval(() => {
+      host.chatUploadProgress = Math.min(95, host.chatUploadProgress + 3);
+    }, 120);
+
+    const agentId = parseAgentSessionKey(host.sessionKey)?.agentId ?? "main";
+    const result = await host.client.request<WorkspaceFilesUploadResult>("workspace.files.upload", {
+      sessionKey: host.sessionKey,
+      agentId,
+      fileName: file.name,
+      mimeType: parsed.mimeType,
+      contentBase64: parsed.contentBase64,
+    });
+
+    host.chatUploadProgress = 100;
+    const safeFileName = result?.fileName?.trim() || file.name;
+    const savedPath = result?.savedPath?.trim();
+    if (!savedPath) {
+      throw new Error("missing saved path");
+    }
+    await handleSendChat(host, `我已经上传了 ${safeFileName} 到路径 ${savedPath}`);
+  } catch (err) {
+    host.chatUploadError = `Upload failed: ${parseUploadError(err)}`;
+  } finally {
+    if (uploadProgressTimer != null) {
+      window.clearInterval(uploadProgressTimer);
+    }
+    window.setTimeout(() => {
+      host.chatUploadRunning = false;
+      host.chatUploadProgress = 0;
+    }, 250);
   }
 }
 

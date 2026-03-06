@@ -62,6 +62,7 @@ const BOOTSTRAP_FILE_NAMES_POST_ONBOARDING = BOOTSTRAP_FILE_NAMES.filter(
 );
 
 const MEMORY_FILE_NAMES = [DEFAULT_MEMORY_FILENAME, DEFAULT_MEMORY_ALT_FILENAME] as const;
+const WORKSPACE_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
 
 const ALLOWED_FILE_NAMES = new Set<string>([...BOOTSTRAP_FILE_NAMES, ...MEMORY_FILE_NAMES]);
 
@@ -94,6 +95,48 @@ function resolveAgentWorkspaceFileOrRespondError(
   }
   const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
   return { cfg, agentId, workspaceDir, name };
+}
+
+function resolveAgentIdFromSessionKey(sessionKey: string): string {
+  const match = /^agent:([^:]+):/i.exec(sessionKey.trim());
+  const candidate = match?.[1]?.trim();
+  return candidate || DEFAULT_AGENT_ID;
+}
+
+function sanitizeUploadFileName(name: string): string {
+  const baseName = path.basename(name || "").trim();
+  const withoutUnsafe = Array.from(baseName)
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      if (code <= 0x1f || '<>:"/\\|?*'.includes(char)) {
+        return "_";
+      }
+      return char;
+    })
+    .join("");
+  const safe = withoutUnsafe.replace(/\s+/g, " ");
+  return safe || "upload.bin";
+}
+
+async function resolveUniqueUploadRelativePath(
+  workspaceDir: string,
+  relativePath: string,
+): Promise<string> {
+  const parsed = path.parse(relativePath);
+  let candidate = relativePath;
+  let index = 1;
+  while (true) {
+    const candidatePath = path.resolve(workspaceDir, candidate);
+    const exists = await fs
+      .access(candidatePath)
+      .then(() => true)
+      .catch(() => false);
+    if (!exists) {
+      return candidate;
+    }
+    candidate = path.join(parsed.dir, `${parsed.name}-${index}${parsed.ext}`);
+    index += 1;
+  }
 }
 
 type FileMeta = {
@@ -785,5 +828,89 @@ export const agentsHandlers: GatewayRequestHandlers = {
     }
 
     respond(true, { agentId, baseDir, query: normalizedQuery, entries }, undefined);
+  },
+  "workspace.files.upload": async ({ params, respond }) => {
+    const body = params && typeof params === "object" ? params : {};
+    const sessionKey = typeof body.sessionKey === "string" ? body.sessionKey.trim() : "";
+    if (!sessionKey) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "sessionKey is required"));
+      return;
+    }
+    const fileNameRaw = typeof body.fileName === "string" ? body.fileName : "";
+    const contentBase64 = typeof body.contentBase64 === "string" ? body.contentBase64.trim() : "";
+    if (!contentBase64) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "contentBase64 is required"),
+      );
+      return;
+    }
+
+    let fileBuffer: Buffer;
+    try {
+      fileBuffer = Buffer.from(contentBase64, "base64");
+    } catch {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "invalid base64 content"));
+      return;
+    }
+    if (!fileBuffer.length) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "empty file content"));
+      return;
+    }
+    if (fileBuffer.length > WORKSPACE_UPLOAD_MAX_BYTES) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "file too large"));
+      return;
+    }
+
+    const cfg = loadConfig();
+    const requestedAgentId = typeof body.agentId === "string" ? body.agentId.trim() : "";
+    const sessionAgentId = resolveAgentIdFromSessionKey(sessionKey);
+    const agentId = resolveAgentIdOrError(
+      requestedAgentId || sessionAgentId || DEFAULT_AGENT_ID,
+      cfg,
+    );
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
+      return;
+    }
+
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    const safeFileName = sanitizeUploadFileName(fileNameRaw);
+    const date = new Date().toISOString().slice(0, 10);
+    const relativePath = await resolveUniqueUploadRelativePath(
+      workspaceDir,
+      path.join("uploads", date, safeFileName),
+    );
+
+    try {
+      await writeFileWithinRoot({
+        rootDir: workspaceDir,
+        relativePath,
+        data: fileBuffer,
+      });
+    } catch {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "failed to write upload file"),
+      );
+      return;
+    }
+
+    const savedPath = path.join(workspaceDir, relativePath);
+    respond(
+      true,
+      {
+        ok: true,
+        agentId,
+        workspace: workspaceDir,
+        fileName: path.basename(relativePath),
+        savedPath,
+        relativePath,
+        size: fileBuffer.length,
+      },
+      undefined,
+    );
   },
 };
