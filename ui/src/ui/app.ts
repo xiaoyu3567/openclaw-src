@@ -30,6 +30,12 @@ import {
 } from "./app-chat.ts";
 import { DEFAULT_CRON_FORM, DEFAULT_LOG_LEVEL_FILTERS } from "./app-defaults.ts";
 import type { EventLogEntry } from "./app-events.ts";
+import {
+  downloadFile as downloadFileInternal,
+  loadFilesView as loadFilesViewInternal,
+  openFilesDirectory as openFilesDirectoryInternal,
+  resolveParentDir,
+} from "./app-files.ts";
 import { connectGateway as connectGatewayInternal } from "./app-gateway.ts";
 import {
   handleConnected,
@@ -173,6 +179,10 @@ export class OpenClawApp extends LitElement {
   @state() chatUploadRunning = false;
   @state() chatUploadProgress = 0;
   @state() chatUploadError: string | null = null;
+  @state() filesPath = "/";
+  @state() filesEntries: string[] = [];
+  @state() filesLoading = false;
+  @state() filesError: string | null = null;
   @state() atPickerOpen = false;
   @state() atPickerQuery = "";
   @state() atPickerEntries: string[] = [];
@@ -521,6 +531,28 @@ export class OpenClawApp extends LitElement {
 
   async loadOverview() {
     await loadOverviewInternal(this as unknown as Parameters<typeof loadOverviewInternal>[0]);
+  }
+
+  async loadFilesView() {
+    await loadFilesViewInternal(this as unknown as Parameters<typeof loadFilesViewInternal>[0]);
+  }
+
+  async openFilesDirectory(path: string) {
+    await openFilesDirectoryInternal(
+      this as unknown as Parameters<typeof openFilesDirectoryInternal>[0],
+      path,
+    );
+  }
+
+  async openFilesParentDirectory() {
+    await openFilesDirectoryInternal(
+      this as unknown as Parameters<typeof openFilesDirectoryInternal>[0],
+      resolveParentDir(this.filesPath),
+    );
+  }
+
+  async downloadFile(path: string) {
+    await downloadFileInternal(this as unknown as Parameters<typeof downloadFileInternal>[0], path);
   }
 
   async loadCron() {

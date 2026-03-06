@@ -487,6 +487,20 @@ export type WorkspaceFilesUploadResult = {
   size: number;
 };
 
+export type WorkspaceFilesDownloadResult = {
+  ok: true;
+  path: string;
+  fileName: string;
+  size: number;
+  contentBase64: string;
+};
+
+export type WorkspaceFilesStateResult = {
+  ok: true;
+  agentId: string;
+  selectedDir: string;
+};
+
 export type PromptQuickToolResult = {
   output: string;
 };

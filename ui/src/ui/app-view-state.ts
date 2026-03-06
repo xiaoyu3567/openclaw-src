@@ -89,6 +89,10 @@ export type AppViewState = {
   chatUploadRunning: boolean;
   chatUploadProgress: number;
   chatUploadError: string | null;
+  filesPath: string;
+  filesEntries: string[];
+  filesLoading: boolean;
+  filesError: string | null;
   atPickerOpen: boolean;
   atPickerQuery: string;
   atPickerEntries: string[];
@@ -308,6 +312,10 @@ export type AppViewState = {
   setTheme: (theme: ThemeMode, context?: ThemeTransitionContext) => void;
   applySettings: (next: UiSettings) => void;
   loadOverview: () => Promise<void>;
+  loadFilesView: () => Promise<void>;
+  openFilesDirectory: (path: string) => Promise<void>;
+  openFilesParentDirectory: () => Promise<void>;
+  downloadFile: (path: string) => Promise<void>;
   loadAssistantIdentity: () => Promise<void>;
   loadCron: () => Promise<void>;
   handleWhatsAppStart: (force: boolean) => Promise<void>;

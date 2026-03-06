@@ -63,6 +63,8 @@ const BOOTSTRAP_FILE_NAMES_POST_ONBOARDING = BOOTSTRAP_FILE_NAMES.filter(
 
 const MEMORY_FILE_NAMES = [DEFAULT_MEMORY_FILENAME, DEFAULT_MEMORY_ALT_FILENAME] as const;
 const WORKSPACE_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
+const WORKSPACE_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024;
+const WORKSPACE_FILES_UI_STATE_RELATIVE_PATH = path.join(".openclaw", "files-ui.json");
 
 const ALLOWED_FILE_NAMES = new Set<string>([...BOOTSTRAP_FILE_NAMES, ...MEMORY_FILE_NAMES]);
 
@@ -137,6 +139,45 @@ async function resolveUniqueUploadRelativePath(
     candidate = path.join(parsed.dir, `${parsed.name}-${index}${parsed.ext}`);
     index += 1;
   }
+}
+
+function resolveAgentForWorkspaceRpc(
+  body: Record<string, unknown>,
+  cfg: ReturnType<typeof loadConfig>,
+): string | null {
+  const sessionKey = typeof body.sessionKey === "string" ? body.sessionKey.trim() : "";
+  const requestedAgentId = typeof body.agentId === "string" ? body.agentId.trim() : "";
+  const sessionAgentId = sessionKey ? resolveAgentIdFromSessionKey(sessionKey) : "";
+  return resolveAgentIdOrError(requestedAgentId || sessionAgentId || DEFAULT_AGENT_ID, cfg);
+}
+
+async function readWorkspaceFilesUiState(workspaceDir: string): Promise<{ selectedDir: string }> {
+  const filePath = path.resolve(workspaceDir, WORKSPACE_FILES_UI_STATE_RELATIVE_PATH);
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw) as { selectedDir?: unknown };
+    const selectedDir =
+      typeof parsed.selectedDir === "string" && parsed.selectedDir.trim()
+        ? parsed.selectedDir.trim()
+        : "/";
+    return { selectedDir };
+  } catch {
+    return { selectedDir: "/" };
+  }
+}
+
+async function writeWorkspaceFilesUiState(
+  workspaceDir: string,
+  next: { selectedDir: string },
+): Promise<void> {
+  const selectedDir = next.selectedDir.trim() || "/";
+  const payload = `${JSON.stringify({ selectedDir }, null, 2)}\n`;
+  await writeFileWithinRoot({
+    rootDir: workspaceDir,
+    relativePath: WORKSPACE_FILES_UI_STATE_RELATIVE_PATH,
+    data: payload,
+    encoding: "utf8",
+  });
 }
 
 type FileMeta = {
@@ -795,6 +836,10 @@ export const agentsHandlers: GatewayRequestHandlers = {
     const agentId = resolveAgentIdOrError(agentIdRaw, cfg) ?? "main";
     const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
     const normalizedQuery = queryRaw.replaceAll("\\", "/").trim();
+    const includeHidden =
+      typeof (params as { includeHidden?: unknown }).includeHidden === "boolean"
+        ? Boolean((params as { includeHidden?: boolean }).includeHidden)
+        : true;
     const isAbsoluteQuery = normalizedQuery.startsWith("/");
     const baseDir = normalizedQuery.includes("/")
       ? normalizedQuery.slice(0, normalizedQuery.lastIndexOf("/") + 1)
@@ -820,6 +865,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
     try {
       const dirents = await fs.readdir(candidateReal, { withFileTypes: true });
       entries = dirents
+        .filter((entry) => (includeHidden ? true : !entry.name.startsWith(".")))
         .filter((entry) => (needle ? entry.name.toLowerCase().includes(needle) : true))
         .slice(0, 80)
         .map((entry) => `${pathPrefix}${entry.name}${entry.isDirectory() ? "/" : ""}`);
@@ -864,12 +910,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
     }
 
     const cfg = loadConfig();
-    const requestedAgentId = typeof body.agentId === "string" ? body.agentId.trim() : "";
-    const sessionAgentId = resolveAgentIdFromSessionKey(sessionKey);
-    const agentId = resolveAgentIdOrError(
-      requestedAgentId || sessionAgentId || DEFAULT_AGENT_ID,
-      cfg,
-    );
+    const agentId = resolveAgentForWorkspaceRpc(body, cfg);
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
       return;
@@ -912,5 +953,78 @@ export const agentsHandlers: GatewayRequestHandlers = {
       },
       undefined,
     );
+  },
+  "workspace.files.download": async ({ params, respond }) => {
+    const body = params && typeof params === "object" ? params : {};
+    const filePathRaw = typeof body.path === "string" ? body.path.trim() : "";
+    if (!filePathRaw) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "path is required"));
+      return;
+    }
+    const filePath = path.resolve(filePathRaw);
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
+    try {
+      stat = await fs.stat(filePath);
+    } catch {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "file not found"));
+      return;
+    }
+    if (!stat.isFile()) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "path is not a file"));
+      return;
+    }
+    if (stat.size > WORKSPACE_DOWNLOAD_MAX_BYTES) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "file too large"));
+      return;
+    }
+
+    let fileBuffer: Buffer;
+    try {
+      fileBuffer = await fs.readFile(filePath);
+    } catch {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "failed to read file"));
+      return;
+    }
+    respond(
+      true,
+      {
+        ok: true,
+        path: filePath,
+        fileName: path.basename(filePath),
+        size: fileBuffer.length,
+        contentBase64: fileBuffer.toString("base64"),
+      },
+      undefined,
+    );
+  },
+  "workspace.files.state.get": async ({ params, respond }) => {
+    const body = params && typeof params === "object" ? params : {};
+    const cfg = loadConfig();
+    const agentId = resolveAgentForWorkspaceRpc(body, cfg);
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
+      return;
+    }
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    const state = await readWorkspaceFilesUiState(workspaceDir);
+    respond(true, { ok: true, agentId, selectedDir: state.selectedDir }, undefined);
+  },
+  "workspace.files.state.set": async ({ params, respond }) => {
+    const body = params && typeof params === "object" ? params : {};
+    const selectedDirRaw = typeof body.selectedDir === "string" ? body.selectedDir.trim() : "";
+    if (!selectedDirRaw) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "selectedDir is required"));
+      return;
+    }
+    const selectedDir = path.resolve(selectedDirRaw);
+    const cfg = loadConfig();
+    const agentId = resolveAgentForWorkspaceRpc(body, cfg);
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
+      return;
+    }
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    await writeWorkspaceFilesUiState(workspaceDir, { selectedDir });
+    respond(true, { ok: true, agentId, selectedDir }, undefined);
   },
 };
