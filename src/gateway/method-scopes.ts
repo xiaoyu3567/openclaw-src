@@ -83,6 +83,8 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "agents.files.list",
     "agents.files.get",
     "workspace.files.list",
+    "workspace.files.download",
+    "workspace.files.state.get",
   ],
   [WRITE_SCOPE]: [
     "send",
@@ -102,6 +104,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "prompt.refine",
     "prompt.quick_tool",
     "workspace.files.upload",
+    "workspace.files.state.set",
     "browser.request",
     "push.test",
     "usage.provider.config.upsert",

@@ -72,6 +72,7 @@ import { renderConfig } from "./views/config.ts";
 import { renderCron } from "./views/cron.ts";
 import { renderDebug } from "./views/debug.ts";
 import { renderExecApprovalPrompt } from "./views/exec-approval.ts";
+import { renderFiles } from "./views/files.ts";
 import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation.ts";
 import { renderInstances } from "./views/instances.ts";
 import { renderLogs } from "./views/logs.ts";
@@ -517,6 +518,21 @@ export function renderApp(state: AppViewState) {
                 onRefresh: () => loadSessions(state),
                 onPatch: (key, patch) => patchSession(state, key, patch),
                 onDelete: (key) => deleteSessionAndRefresh(state, key),
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "files"
+            ? renderFiles({
+                path: state.filesPath,
+                entries: state.filesEntries,
+                loading: state.filesLoading,
+                error: state.filesError,
+                onRefresh: () => void state.loadFilesView(),
+                onOpenDir: (path) => void state.openFilesDirectory(path),
+                onOpenParent: () => void state.openFilesParentDirectory(),
+                onDownload: (path) => void state.downloadFile(path),
               })
             : nothing
         }

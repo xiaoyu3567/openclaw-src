@@ -238,6 +238,9 @@ export async function refreshActiveTab(host: SettingsHost) {
       !host.chatHasAutoScrolled,
     );
   }
+  if (host.tab === "files") {
+    await (host as unknown as { loadFilesView: () => Promise<void> }).loadFilesView();
+  }
   if (host.tab === "config") {
     await loadConfigSchema(host as unknown as OpenClawApp);
     await loadConfig(host as unknown as OpenClawApp);
