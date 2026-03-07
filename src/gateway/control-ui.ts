@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
+import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { openBoundaryFileSync } from "../infra/boundary-file-read.js";
 import { resolveControlUiRootSync } from "../infra/control-ui-assets.js";
@@ -21,6 +22,9 @@ import {
 } from "./control-ui-shared.js";
 
 const ROOT_PREFIX = "/";
+const CONTROL_UI_WORKSPACE_IMAGE_PREFIX = "/__openclaw/workspace-image";
+const CONTROL_UI_WORKSPACE_IMAGE_MAX_BYTES = 25 * 1024 * 1024;
+const WORKSPACE_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]);
 
 export type ControlUiRequestOptions = {
   basePath?: string;
@@ -186,6 +190,114 @@ export function handleControlUiAvatarRequest(
   }
 }
 
+function resolveSafeWorkspaceImageFile(params: {
+  cfg: OpenClawConfig;
+  agentId: string;
+  requestedPath: string;
+}): { path: string; fd: number } | null {
+  const rawPath = params.requestedPath.trim();
+  if (!rawPath) {
+    return null;
+  }
+
+  const workspaceDir = resolveAgentWorkspaceDir(params.cfg, params.agentId);
+  if (!workspaceDir) {
+    return null;
+  }
+
+  let workspaceRoot: string;
+  try {
+    workspaceRoot = fs.realpathSync(workspaceDir);
+  } catch {
+    return null;
+  }
+
+  const candidatePath = path.isAbsolute(rawPath)
+    ? path.resolve(rawPath)
+    : path.resolve(workspaceRoot, rawPath);
+  const ext = path.extname(candidatePath).toLowerCase();
+  if (!WORKSPACE_IMAGE_EXTENSIONS.has(ext)) {
+    return null;
+  }
+
+  const opened = openBoundaryFileSync({
+    absolutePath: candidatePath,
+    rootPath: workspaceRoot,
+    rootRealPath: workspaceRoot,
+    boundaryLabel: "agent workspace image",
+    maxBytes: CONTROL_UI_WORKSPACE_IMAGE_MAX_BYTES,
+    skipLexicalRootCheck: true,
+  });
+  if (!opened.ok) {
+    return null;
+  }
+  return { path: opened.path, fd: opened.fd };
+}
+
+function handleControlUiWorkspaceImageRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  opts: { basePath?: string; cfg?: OpenClawConfig; defaultAgentId?: string },
+): boolean {
+  const urlRaw = req.url;
+  if (!urlRaw) {
+    return false;
+  }
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    return false;
+  }
+
+  const url = new URL(urlRaw, "http://localhost");
+  const basePath = normalizeControlUiBasePath(opts.basePath);
+  const pathname = url.pathname;
+  const pathWithBase = basePath
+    ? `${basePath}${CONTROL_UI_WORKSPACE_IMAGE_PREFIX}/`
+    : `${CONTROL_UI_WORKSPACE_IMAGE_PREFIX}/`;
+  if (!pathname.startsWith(pathWithBase)) {
+    return false;
+  }
+
+  applyControlUiSecurityHeaders(res);
+
+  const agentIdParts = pathname.slice(pathWithBase.length).split("/").filter(Boolean);
+  const agentId = agentIdParts[0] ?? opts.defaultAgentId ?? "";
+  if (agentIdParts.length !== 1 || !agentId || !isValidAgentId(agentId)) {
+    respondNotFound(res);
+    return true;
+  }
+
+  const requestedPath = url.searchParams.get("path") ?? "";
+  if (!opts.cfg || !requestedPath) {
+    respondNotFound(res);
+    return true;
+  }
+
+  const safeFile = resolveSafeWorkspaceImageFile({
+    cfg: opts.cfg,
+    agentId,
+    requestedPath,
+  });
+  if (!safeFile) {
+    respondNotFound(res);
+    return true;
+  }
+
+  try {
+    if (req.method === "HEAD") {
+      res.statusCode = 200;
+      res.setHeader("Content-Type", contentTypeForExt(path.extname(safeFile.path).toLowerCase()));
+      res.setHeader("Cache-Control", "no-cache");
+      res.end();
+      return true;
+    }
+
+    serveResolvedFile(res, safeFile.path, fs.readFileSync(safeFile.fd));
+    return true;
+  } finally {
+    fs.closeSync(safeFile.fd);
+  }
+}
+
 function respondNotFound(res: ServerResponse) {
   res.statusCode = 404;
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -335,6 +447,16 @@ export function handleControlUiHttpRequest(
       assistantAvatar: avatarValue ?? identity.avatar,
       assistantAgentId: identity.agentId,
     } satisfies ControlUiBootstrapConfig);
+    return true;
+  }
+
+  if (
+    handleControlUiWorkspaceImageRequest(req, res, {
+      basePath,
+      cfg: opts?.config,
+      defaultAgentId: opts?.config ? resolveDefaultAgentId(opts.config) : opts?.agentId,
+    })
+  ) {
     return true;
   }
 

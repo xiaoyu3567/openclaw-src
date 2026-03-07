@@ -78,6 +78,8 @@ export type ChatProps = {
   splitRatio?: number;
   assistantName: string;
   assistantAvatar: string | null;
+  basePath?: string;
+  assistantAgentId?: string | null;
   // Image attachments
   attachments?: ChatAttachment[];
   onAttachmentsChange?: (attachments: ChatAttachment[]) => void;
@@ -369,6 +371,7 @@ export function renderChat(props: ChatProps) {
               item.startedAt,
               props.onOpenSidebar,
               assistantIdentity,
+              { basePath: props.basePath, agentId: props.assistantAgentId },
             );
           }
 
@@ -378,6 +381,8 @@ export function renderChat(props: ChatProps) {
               showReasoning,
               assistantName: props.assistantName,
               assistantAvatar: assistantIdentity.avatar,
+              basePath: props.basePath,
+              assistantAgentId: props.assistantAgentId,
             });
           }
 

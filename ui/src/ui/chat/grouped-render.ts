@@ -6,6 +6,7 @@ import { openExternalUrlSafe } from "../open-external-url.ts";
 import { detectTextDirection } from "../text-direction.ts";
 import type { MessageGroup } from "../types/chat-types.ts";
 import { renderCopyAsMarkdownButton } from "./copy-as-markdown.ts";
+import { extractLocalImagePreviews } from "./local-image-previews.ts";
 import {
   extractTextCached,
   extractThinkingCached,
@@ -76,6 +77,7 @@ export function renderStreamingGroup(
   startedAt: number,
   onOpenSidebar?: (content: string) => void,
   assistant?: AssistantIdentity,
+  localImageOpts?: { basePath?: string; agentId?: string | null },
 ) {
   const timestamp = new Date(startedAt).toLocaleTimeString([], {
     hour: "numeric",
@@ -93,7 +95,7 @@ export function renderStreamingGroup(
             content: [{ type: "text", text }],
             timestamp: startedAt,
           },
-          { isStreaming: true, showReasoning: false },
+          { isStreaming: true, showReasoning: false, localImageOpts },
           onOpenSidebar,
         )}
         <div class="chat-group-footer">
@@ -112,6 +114,8 @@ export function renderMessageGroup(
     showReasoning: boolean;
     assistantName?: string;
     assistantAvatar?: string | null;
+    basePath?: string;
+    assistantAgentId?: string | null;
   },
 ) {
   const normalizedRole = normalizeRoleForGrouping(group.role);
@@ -142,6 +146,10 @@ export function renderMessageGroup(
             {
               isStreaming: group.isStreaming && index === group.messages.length - 1,
               showReasoning: opts.showReasoning,
+              localImageOpts: {
+                basePath: opts.basePath,
+                agentId: opts.assistantAgentId,
+              },
             },
             opts.onOpenSidebar,
           ),
@@ -196,6 +204,20 @@ function isAvatarUrl(value: string): boolean {
   );
 }
 
+function mergeImageBlocks(primary: ImageBlock[], secondary: ImageBlock[]): ImageBlock[] {
+  const merged: ImageBlock[] = [];
+  const seen = new Set<string>();
+  for (const item of [...primary, ...secondary]) {
+    const key = item.url.trim();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+}
+
 function renderMessageImages(images: ImageBlock[]) {
   if (images.length === 0) {
     return nothing;
@@ -223,7 +245,11 @@ function renderMessageImages(images: ImageBlock[]) {
 
 function renderGroupedMessage(
   message: unknown,
-  opts: { isStreaming: boolean; showReasoning: boolean },
+  opts: {
+    isStreaming: boolean;
+    showReasoning: boolean;
+    localImageOpts?: { basePath?: string; agentId?: string | null };
+  },
   onOpenSidebar?: (content: string) => void,
 ) {
   const m = message as Record<string, unknown>;
@@ -237,10 +263,20 @@ function renderGroupedMessage(
 
   const toolCards = extractToolCards(message);
   const hasToolCards = toolCards.length > 0;
-  const images = extractImages(message);
-  const hasImages = images.length > 0;
+  const structuredImages = extractImages(message);
 
   const extractedText = extractTextCached(message);
+  // Auto-preview local image files mentioned in assistant text, e.g. `world-map.png:1`.
+  const localImageBlocks =
+    role === "assistant" && extractedText?.trim()
+      ? extractLocalImagePreviews(extractedText, {
+          basePath: opts.localImageOpts?.basePath,
+          agentId: opts.localImageOpts?.agentId,
+        }).map((item) => ({ url: item.url, alt: item.alt }))
+      : [];
+  const images = mergeImageBlocks(structuredImages, localImageBlocks);
+  const hasImages = images.length > 0;
+
   const extractedThinking =
     opts.showReasoning && role === "assistant" ? extractThinkingCached(message) : null;
   const markdownBase = extractedText?.trim() ? extractedText : null;

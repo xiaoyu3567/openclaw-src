@@ -197,6 +197,66 @@ describe("handleControlUiHttpRequest", () => {
     });
   });
 
+  it("serves workspace image previews from the agent workspace", async () => {
+    await withControlUiRoot({
+      fn: async (tmp) => {
+        const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-ui-workspace-"));
+        try {
+          await fs.writeFile(path.join(workspace, "world-map.png"), "png-bytes\n");
+
+          const { res, end } = makeMockHttpResponse();
+          const handled = handleControlUiHttpRequest(
+            {
+              url: "/__openclaw/workspace-image/main?path=world-map.png",
+              method: "GET",
+            } as IncomingMessage,
+            res,
+            {
+              root: { kind: "resolved", path: tmp },
+              config: { agents: { defaults: { workspace } } },
+            },
+          );
+
+          expect(handled).toBe(true);
+          expect(res.statusCode).toBe(200);
+          expect(String(end.mock.calls.at(-1)?.[0] ?? "")).toBe("png-bytes\n");
+        } finally {
+          await fs.rm(workspace, { recursive: true, force: true });
+        }
+      },
+    });
+  });
+
+  it("rejects workspace preview requests outside the agent workspace", async () => {
+    await withControlUiRoot({
+      fn: async (tmp) => {
+        const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-ui-workspace-"));
+        const outside = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-ui-outside-image-"));
+        try {
+          await fs.writeFile(path.join(outside, "secret.png"), "secret\n");
+
+          const { res, end } = makeMockHttpResponse();
+          const handled = handleControlUiHttpRequest(
+            {
+              url: `/__openclaw/workspace-image/main?path=${encodeURIComponent(path.join(outside, "secret.png"))}`,
+              method: "GET",
+            } as IncomingMessage,
+            res,
+            {
+              root: { kind: "resolved", path: tmp },
+              config: { agents: { defaults: { workspace } } },
+            },
+          );
+
+          expectNotFoundResponse({ handled, res, end });
+        } finally {
+          await fs.rm(workspace, { recursive: true, force: true });
+          await fs.rm(outside, { recursive: true, force: true });
+        }
+      },
+    });
+  });
+
   it("serves local avatar bytes through hardened avatar handler", async () => {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-avatar-http-"));
     try {

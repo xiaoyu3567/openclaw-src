@@ -16,6 +16,26 @@ function renderAssistantImage(url: string) {
 }
 
 describe("chat image open safety", () => {
+  it("renders assistant local workspace image references as preview images", async () => {
+    const app = mountApp("/chat");
+    await app.updateComplete;
+
+    app.basePath = "";
+    app.assistantAgentId = "main";
+    app.chatMessages = [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Here is `world-map.png:1` for preview." }],
+        timestamp: Date.now(),
+      },
+    ];
+    await app.updateComplete;
+
+    const image = app.querySelector<HTMLImageElement>(".chat-message-image");
+    expect(image).not.toBeNull();
+    expect(image?.getAttribute("src")).toBe("/__openclaw/workspace-image/main?path=world-map.png");
+  });
+
   it("opens safe image URLs in a hardened new tab", async () => {
     const app = mountApp("/chat");
     await app.updateComplete;

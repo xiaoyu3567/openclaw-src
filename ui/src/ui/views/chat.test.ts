@@ -181,6 +181,29 @@ describe("chat view", () => {
     nowSpy.mockRestore();
   });
 
+  it("renders local workspace image references from assistant messages", () => {
+    const container = document.createElement("div");
+    render(
+      renderChat(
+        createProps({
+          assistantAgentId: "main",
+          messages: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "Generated file: `world-map.png:1`" }],
+              timestamp: Date.now(),
+            },
+          ],
+        }),
+      ),
+      container,
+    );
+
+    const image = container.querySelector<HTMLImageElement>(".chat-message-image");
+    expect(image).not.toBeNull();
+    expect(image?.getAttribute("src")).toBe("/__openclaw/workspace-image/main?path=world-map.png");
+  });
+
   it("shows Stop and hides Refine when aborting is available", () => {
     const container = document.createElement("div");
     const onAbort = vi.fn();
