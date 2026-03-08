@@ -1,5 +1,6 @@
 import { html, nothing } from "lit";
 import type { FilesMenuPosition } from "../app-files.ts";
+import { icon, type IconName } from "../icons.ts";
 import type { PreviewDockMode, PreviewImageMode } from "../storage.ts";
 import { renderFilesDeleteConfirm } from "./files-delete-confirm.ts";
 import { renderFilesPreview } from "./files-preview.ts";
@@ -116,6 +117,21 @@ function resolveContextMenuStyle(position?: FilesMenuPosition | null): string {
   return `position: fixed; left: ${x}px; top: ${y}px; z-index: 20; min-width: ${FILES_CONTEXT_MENU_MIN_WIDTH}px;`;
 }
 
+function renderFilesIcon(name: IconName, className: string, dataIcon?: string) {
+  return html`<span class=${className} aria-hidden="true" data-icon=${dataIcon ?? name}>${icon(name)}</span>`;
+}
+
+function renderMenuButton(label: string, iconName: IconName, onClick: () => void, extraClass = "") {
+  return html`<button
+    class="btn btn--sm files-action-btn ${extraClass}"
+    style="width: 100%; justify-content: flex-start; margin-bottom: 8px;"
+    @click=${onClick}
+  >
+    ${renderFilesIcon(iconName, "files-icon files-icon--action", iconName)}
+    <span>${label}</span>
+  </button>`;
+}
+
 function renderContextMenu(props: FilesViewProps) {
   if (!props.contextMenuOpen || !props.contextMenuTargetPath) {
     return nothing;
@@ -130,27 +146,9 @@ function renderContextMenu(props: FilesViewProps) {
       @click=${() => props.onCloseContextMenu?.()}
     ></div>
     <div class="files-context-menu card" style=${menuStyle} @click=${stopEvent}>
-      <button
-        class="btn btn--sm"
-        style="width: 100%; justify-content: flex-start; margin-bottom: 8px;"
-        @click=${() => props.onPreview?.(props.contextMenuTargetPath!)}
-      >
-        Preview
-      </button>
-      <button
-        class="btn btn--sm"
-        style="width: 100%; justify-content: flex-start; margin-bottom: 8px;"
-        @click=${() => props.onDownload(props.contextMenuTargetPath!)}
-      >
-        Download
-      </button>
-      <button
-        class="btn btn--sm"
-        style="width: 100%; justify-content: flex-start;"
-        @click=${() => props.onDelete?.(props.contextMenuTargetPath!)}
-      >
-        Delete
-      </button>
+      ${renderMenuButton("Preview", "materialVisibility", () => props.onPreview?.(props.contextMenuTargetPath!))}
+      ${renderMenuButton("Download", "materialDownload", () => props.onDownload(props.contextMenuTargetPath!))}
+      ${renderMenuButton("Delete", "materialDelete", () => props.onDelete?.(props.contextMenuTargetPath!), "danger")}
     </div>
   `;
 }
@@ -172,21 +170,21 @@ function openFileContextMenuFromTrigger(
   );
 }
 
-function resolveFileIcon(entryPath: string, isDir: boolean): string {
+function resolveFileIconName(entryPath: string, isDir: boolean): IconName {
   if (isDir) {
-    return "📁";
+    return "materialFolder";
   }
   const lower = entryPath.toLowerCase();
   if (/\.(png|jpe?g|gif|webp|svg)$/.test(lower)) {
-    return "🖼️";
+    return "materialImage";
   }
   if (lower.endsWith(".md")) {
-    return "📝";
+    return "materialDescription";
   }
   if (/\.(ts|tsx|js|jsx|mjs|cjs|json|css|html|py|sh|ya?ml|rs|go|java|sql)$/.test(lower)) {
-    return "💻";
+    return "materialCode";
   }
-  return "📄";
+  return "materialDraft";
 }
 
 function renderRow(entry: string, props: FilesViewProps) {
@@ -195,7 +193,7 @@ function renderRow(entry: string, props: FilesViewProps) {
   const label = normalized.split("/").filter(Boolean).pop() || (isDir ? "/" : normalized);
   const isContextTarget = props.contextMenuOpen && props.contextMenuTargetPath === normalized;
   const isSelected = props.selectedPath === normalized;
-  const icon = resolveFileIcon(normalized, isDir);
+  const iconName = resolveFileIconName(normalized, isDir);
   return html`<div
     class="files-row ${isDir ? "files-row--dir" : "files-row--file"} ${isContextTarget ? "files-row--active" : ""} ${isSelected ? "files-row--selected" : ""}"
     role=${isDir ? "button" : nothing}
@@ -227,7 +225,10 @@ function renderRow(entry: string, props: FilesViewProps) {
         : undefined
     }
   >
-    <div class="files-row__name" title=${normalized}>${icon} ${label}</div>
+    <div class="files-row__name" title=${normalized}>
+      ${renderFilesIcon(iconName, "files-icon files-icon--row", iconName)}
+      <span>${label}</span>
+    </div>
     <div class="files-row__path">${normalized}</div>
     ${
       isDir
@@ -245,7 +246,7 @@ function renderRow(entry: string, props: FilesViewProps) {
                 openFileContextMenuFromTrigger(event, normalized, props);
               }}
             >
-              <span aria-hidden="true">⋯</span>
+              ${renderFilesIcon("materialMoreVert", "files-icon files-icon--action", "materialMoreVert")}
             </button>
           </div>`
     }

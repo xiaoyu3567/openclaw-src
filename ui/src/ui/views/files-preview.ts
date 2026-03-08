@@ -1,5 +1,6 @@
 import { html, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
+import { icon, type IconName } from "../icons.ts";
 import { toSanitizedMarkdownHtml } from "../markdown.ts";
 import type { PreviewDockMode, PreviewImageMode } from "../storage.ts";
 import { isCodePreviewPath, renderHighlightedCodeHtml } from "./files-code-highlight.ts";
@@ -80,47 +81,39 @@ function resolvePreviewStyle(props: FilesPreviewProps): string {
   return `width: ${width}px; height: ${height}px; transform: translate(${offsetX}px, ${offsetY}px); resize: both; overflow: hidden;`;
 }
 
+function renderPreviewAction(
+  label: string,
+  iconName: IconName,
+  onClick: () => void,
+  active = false,
+) {
+  return html`<button class="btn btn--sm files-action-btn ${active ? "active" : ""}" @click=${onClick}>
+    <span class="files-icon files-icon--action" aria-hidden="true" data-icon=${iconName}>${icon(iconName)}</span>
+    <span>${label}</span>
+  </button>`;
+}
+
 function renderHeaderActions(props: FilesPreviewProps, isCodePreview: boolean) {
   return html`
     <div class="files-preview__header-actions">
       ${
         isCodePreview || props.kind === "markdown"
-          ? html`<button class="btn btn--sm" @click=${() => props.onCopyText?.()}>Copy</button>`
+          ? renderPreviewAction("Copy", "materialContentCopy", () => props.onCopyText?.())
           : nothing
       }
       ${
         props.kind === "markdown"
           ? html`
-              <button
-                class="btn btn--sm ${props.markdownMode !== "source" ? "active" : ""}"
-                @click=${() => props.onSetMarkdownMode?.("render")}
-              >
-                Render
-              </button>
-              <button
-                class="btn btn--sm ${props.markdownMode === "source" ? "active" : ""}"
-                @click=${() => props.onSetMarkdownMode?.("source")}
-              >
-                Source
-              </button>
+              ${renderPreviewAction("Render", "materialVisibility", () => props.onSetMarkdownMode?.("render"), props.markdownMode !== "source")}
+              ${renderPreviewAction("Source", "materialCode", () => props.onSetMarkdownMode?.("source"), props.markdownMode === "source")}
             `
           : nothing
       }
       ${
         props.kind === "image"
           ? html`
-              <button
-                class="btn btn--sm ${props.imageMode === "fit" ? "active" : ""}"
-                @click=${() => props.onSetImageMode?.("fit")}
-              >
-                Fit
-              </button>
-              <button
-                class="btn btn--sm ${props.imageMode === "actual" ? "active" : ""}"
-                @click=${() => props.onSetImageMode?.("actual")}
-              >
-                100%
-              </button>
+              ${renderPreviewAction("Fit", "materialCenter", () => props.onSetImageMode?.("fit"), props.imageMode === "fit")}
+              ${renderPreviewAction("100%", "materialDock", () => props.onSetImageMode?.("actual"), props.imageMode === "actual")}
               <button
                 class="btn btn--sm ${props.imageBackground === "checker" ? "active" : ""}"
                 @click=${() => props.onSetImageBackground?.("checker")}
@@ -142,13 +135,12 @@ function renderHeaderActions(props: FilesPreviewProps, isCodePreview: boolean) {
             `
           : nothing
       }
-      <button
-        class="btn btn--sm"
-        @click=${() => props.onSetDockMode?.(props.dockMode === "corner" ? "center" : "corner")}
-      >
-        ${props.dockMode === "corner" ? "Center" : "Dock"}
-      </button>
-      <button class="btn btn--sm" @click=${props.onClose}>Close</button>
+      ${renderPreviewAction(
+        props.dockMode === "corner" ? "Center" : "Dock",
+        props.dockMode === "corner" ? "materialCenter" : "materialDock",
+        () => props.onSetDockMode?.(props.dockMode === "corner" ? "center" : "corner"),
+      )}
+      ${renderPreviewAction("Close", "materialClose", props.onClose)}
     </div>
   `;
 }

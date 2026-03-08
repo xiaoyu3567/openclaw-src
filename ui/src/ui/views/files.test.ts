@@ -82,7 +82,7 @@ describe("files view", () => {
     expect(container.textContent).not.toContain("Open");
   });
 
-  it("renders richer file type icons", () => {
+  it("renders material-style file type icons", () => {
     const container = document.createElement("div");
     render(
       renderFiles(
@@ -94,13 +94,15 @@ describe("files view", () => {
       container,
     );
 
-    const names = [...container.querySelectorAll(".files-row__name")].map(
-      (el) => el.textContent ?? "",
+    const icons = [...container.querySelectorAll<HTMLElement>(".files-row__name .files-icon")].map(
+      (el) => el.dataset.icon ?? "",
     );
-    expect(names[0]).toContain("🖼️");
-    expect(names[1]).toContain("📝");
-    expect(names[2]).toContain("💻");
-    expect(names[3]).toContain("📄");
+    expect(icons).toEqual([
+      "materialImage",
+      "materialDescription",
+      "materialCode",
+      "materialDraft",
+    ]);
   });
 
   it("fires long press callback for file rows", () => {
@@ -191,6 +193,11 @@ describe("files view", () => {
     expect(container.querySelector(".files-row__menu-trigger")).not.toBeNull();
     expect(container.textContent).toContain("Preview");
     expect(container.textContent).toContain("Download");
+    expect(
+      [...container.querySelectorAll<HTMLElement>(".files-context-menu .files-icon")].map(
+        (el) => el.dataset.icon ?? "",
+      ),
+    ).toEqual(["materialVisibility", "materialDownload", "materialDelete"]);
   });
 
   it("keeps the context menu inside the viewport bounds", () => {
@@ -346,6 +353,11 @@ describe("files view", () => {
     expect(container.querySelector(".files-code-token--number")?.textContent).toContain("42");
     expect(container.textContent).toContain("Copy");
     expect(container.textContent).toContain("Center");
+    expect(
+      [
+        ...container.querySelectorAll<HTMLElement>(".files-preview__header-actions .files-icon"),
+      ].map((el) => el.dataset.icon ?? ""),
+    ).toEqual(["materialContentCopy", "materialCenter", "materialClose"]);
   });
 
   it("renders markdown preview content", () => {
@@ -369,6 +381,16 @@ describe("files view", () => {
     expect(container.querySelector(".chat-text strong")?.textContent).toBe("world");
     expect(container.textContent).toContain("Render");
     expect(container.textContent).toContain("Source");
+    expect(
+      [
+        ...container.querySelectorAll<HTMLElement>(".files-preview__header-actions .files-icon"),
+      ].map((el) => el.dataset.icon ?? ""),
+    ).toContain("materialVisibility");
+    expect(
+      [
+        ...container.querySelectorAll<HTMLElement>(".files-preview__header-actions .files-icon"),
+      ].map((el) => el.dataset.icon ?? ""),
+    ).toContain("materialCode");
   });
 
   it("renders markdown source mode when requested", () => {

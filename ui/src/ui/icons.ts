@@ -228,6 +228,105 @@ export const icons = {
       />
     </svg>
   `,
+
+  // Material-style icons for Files module (kept as inline SVG to match current architecture)
+  materialFolder: html`
+    <svg viewBox="0 0 24 24">
+      <path
+        d="M4 6.5A1.5 1.5 0 0 1 5.5 5H10l1.5 2H18.5A1.5 1.5 0 0 1 20 8.5v8A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5z"
+      />
+      <path d="M4 9h16" />
+    </svg>
+  `,
+  materialDescription: html`
+    <svg viewBox="0 0 24 24">
+      <path
+        d="M7 4.5h7l4 4v11A1.5 1.5 0 0 1 16.5 21h-9A1.5 1.5 0 0 1 6 19.5v-13A1.5 1.5 0 0 1 7.5 5z"
+      />
+      <path d="M14 4.5v4h4" />
+      <path d="M9 12h6" />
+      <path d="M9 15h6" />
+    </svg>
+  `,
+  materialCode: html`
+    <svg viewBox="0 0 24 24">
+      <path d="m9 9-3 3 3 3" />
+      <path d="m15 9 3 3-3 3" />
+      <path d="m13 7-2 10" />
+    </svg>
+  `,
+  materialImage: html`
+    <svg viewBox="0 0 24 24">
+      <rect x="4" y="5" width="16" height="14" rx="1.5" />
+      <circle cx="9" cy="10" r="1.5" />
+      <path d="m20 15-3.5-3.5a1.5 1.5 0 0 0-2.1 0L8 18" />
+    </svg>
+  `,
+  materialDraft: html`
+    <svg viewBox="0 0 24 24">
+      <path
+        d="M7.5 4.5h9l3 3v11A1.5 1.5 0 0 1 18 20H7.5A1.5 1.5 0 0 1 6 18.5v-12A1.5 1.5 0 0 1 7.5 5z"
+      />
+      <path d="M9 11h6" />
+      <path d="M9 14h4.5" />
+    </svg>
+  `,
+  materialMoreVert: html`
+    <svg viewBox="0 0 24 24">
+      <circle cx="12" cy="6" r="1.25" />
+      <circle cx="12" cy="12" r="1.25" />
+      <circle cx="12" cy="18" r="1.25" />
+    </svg>
+  `,
+  materialVisibility: html`
+    <svg viewBox="0 0 24 24">
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </svg>
+  `,
+  materialDownload: html`
+    <svg viewBox="0 0 24 24">
+      <path d="M12 5v9" />
+      <path d="m8.5 11.5 3.5 3.5 3.5-3.5" />
+      <path d="M5 18.5h14" />
+    </svg>
+  `,
+  materialDelete: html`
+    <svg viewBox="0 0 24 24">
+      <path d="M5 7h14" />
+      <path d="M9 7V5.5h6V7" />
+      <path d="M8 7l.75 11h6.5L16 7" />
+      <path d="M10.5 10.5v5" />
+      <path d="M13.5 10.5v5" />
+    </svg>
+  `,
+  materialClose: html`
+    <svg viewBox="0 0 24 24">
+      <path d="M6.5 6.5 17.5 17.5" />
+      <path d="M17.5 6.5 6.5 17.5" />
+    </svg>
+  `,
+  materialContentCopy: html`
+    <svg viewBox="0 0 24 24">
+      <rect x="9" y="9" width="9" height="9" rx="1.5" />
+      <path d="M7.5 15H6A1.5 1.5 0 0 1 4.5 13.5V6A1.5 1.5 0 0 1 6 4.5h7.5A1.5 1.5 0 0 1 15 6v1.5" />
+    </svg>
+  `,
+  materialCenter: html`
+    <svg viewBox="0 0 24 24">
+      <path d="M5 9V5h4" />
+      <path d="M15 5h4v4" />
+      <path d="M19 15v4h-4" />
+      <path d="M9 19H5v-4" />
+      <path d="M9 9h6v6H9z" />
+    </svg>
+  `,
+  materialDock: html`
+    <svg viewBox="0 0 24 24">
+      <rect x="4" y="5" width="16" height="14" rx="1.5" />
+      <path d="M13 14h5v4h-5z" />
+    </svg>
+  `,
 } as const;
 
 export type IconName = keyof typeof icons;
