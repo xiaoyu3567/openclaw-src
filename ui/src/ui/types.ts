@@ -512,6 +512,13 @@ export type WorkspaceFilesDeleteResult = {
   deletedPath: string;
 };
 
+export type WorkspaceFilesWriteResult = {
+  ok: true;
+  path: string;
+  size: number;
+  updatedAtMs: number;
+};
+
 export type WorkspaceFilesStateResult = {
   ok: true;
   agentId: string;

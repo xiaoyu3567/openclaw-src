@@ -34,13 +34,18 @@ const resolveCommit = () => {
   }
 };
 
+const formatDisplayVersion = (date: Date) =>
+  `魔改 ${date.getFullYear()}.${date.getMonth() + 1}.${date.getDate()}`;
+
 const version = readPackageVersion();
 const commit = resolveCommit();
+const builtAtDate = new Date();
 
 const buildInfo = {
   version,
+  displayVersion: formatDisplayVersion(builtAtDate),
   commit,
-  builtAt: new Date().toISOString(),
+  builtAt: builtAtDate.toISOString(),
 };
 
 fs.mkdirSync(distDir, { recursive: true });

@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   fsAccess: vi.fn(async () => {}),
   fsMkdir: vi.fn(async () => undefined),
   fsAppendFile: vi.fn(async () => {}),
+  fsWriteFile: vi.fn(async () => {}),
   fsReadFile: vi.fn(async () => ""),
   fsStat: vi.fn(async (..._args: unknown[]) => null as import("node:fs").Stats | null),
   fsLstat: vi.fn(async (..._args: unknown[]) => null as import("node:fs").Stats | null),
@@ -87,6 +88,7 @@ vi.mock("node:fs/promises", async () => {
     access: mocks.fsAccess,
     mkdir: mocks.fsMkdir,
     appendFile: mocks.fsAppendFile,
+    writeFile: mocks.fsWriteFile,
     readFile: mocks.fsReadFile,
     stat: mocks.fsStat,
     lstat: mocks.fsLstat,
@@ -760,6 +762,58 @@ describe("workspace.files.preview", () => {
         contentBase64: buffer.toString("base64"),
       }),
       undefined,
+    );
+  });
+});
+
+describe("workspace.files.write", () => {
+  it("writes updated text content to a file", async () => {
+    const updatedStat = makeFileStat({ size: 20 });
+    Object.defineProperty(updatedStat, "mtimeMs", { value: 1234, configurable: true });
+    mocks.fsStat
+      .mockResolvedValueOnce(makeFileStat({ size: 8 }))
+      .mockResolvedValueOnce(updatedStat);
+
+    const { respond, promise } = makeCall("workspace.files.write", {
+      agentId: "main",
+      path: "/tmp/edit-me.txt",
+      content: "updated text content",
+    });
+    await promise;
+
+    expect(mocks.fsWriteFile).toHaveBeenCalledWith(
+      path.resolve("/tmp/edit-me.txt"),
+      "updated text content",
+      "utf8",
+    );
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        ok: true,
+        path: path.resolve("/tmp/edit-me.txt"),
+        size: 20,
+        updatedAtMs: 1234,
+      }),
+      undefined,
+    );
+  });
+
+  it("rejects writing directory paths", async () => {
+    mocks.fsStat.mockResolvedValue({
+      isFile: () => false,
+    } as unknown as import("node:fs").Stats);
+
+    const { respond, promise } = makeCall("workspace.files.write", {
+      agentId: "main",
+      path: "/tmp/folder",
+      content: "x",
+    });
+    await promise;
+
+    expect(respond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({ message: expect.stringContaining("not a file") }),
     );
   });
 });

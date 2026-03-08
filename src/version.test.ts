@@ -4,6 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  readDisplayVersionFromBuildInfoForModuleUrl,
   readVersionFromBuildInfoForModuleUrl,
   readVersionFromPackageJsonForModuleUrl,
   resolveRuntimeServiceVersion,
@@ -64,10 +65,15 @@ describe("version resolution", () => {
 
   it("falls back to build-info when package metadata is unavailable", async () => {
     await withTempDir(async (root) => {
-      await writeJsonFixture(root, "build-info.json", { version: "4.5.6" });
+      await writeJsonFixture(root, "build-info.json", {
+        version: "4.5.6",
+        displayVersion: "魔改 2026.3.8",
+        builtAt: "2026-03-08T08:00:00.000Z",
+      });
       const moduleUrl = await ensureModuleFixture(root);
       expect(readVersionFromPackageJsonForModuleUrl(moduleUrl)).toBeNull();
       expect(readVersionFromBuildInfoForModuleUrl(moduleUrl)).toBe("4.5.6");
+      expect(readDisplayVersionFromBuildInfoForModuleUrl(moduleUrl)).toBe("魔改 2026.3.8");
       expect(resolveVersionFromModuleUrl(moduleUrl)).toBe("4.5.6");
     });
   });
@@ -91,6 +97,7 @@ describe("version resolution", () => {
   it("returns null for malformed module URLs", () => {
     expect(readVersionFromPackageJsonForModuleUrl("not-a-valid-url")).toBeNull();
     expect(readVersionFromBuildInfoForModuleUrl("not-a-valid-url")).toBeNull();
+    expect(readDisplayVersionFromBuildInfoForModuleUrl("not-a-valid-url")).toBeNull();
     expect(resolveVersionFromModuleUrl("not-a-valid-url")).toBeNull();
   });
 

@@ -24,6 +24,9 @@ export type FilesViewProps = {
   previewError?: string | null;
   previewText?: string | null;
   previewImageDataUrl?: string | null;
+  previewFileName?: string | null;
+  previewFileSize?: number | null;
+  previewMimeType?: string | null;
   previewPanelWidth?: number;
   previewPanelHeight?: number;
   previewDockMode?: PreviewDockMode;
@@ -32,6 +35,11 @@ export type FilesViewProps = {
   previewImageBackground?: "checker" | "dark" | "light";
   previewOffsetX?: number;
   previewOffsetY?: number;
+  editMode?: boolean;
+  editDraft?: string;
+  editDirty?: boolean;
+  editSaving?: boolean;
+  editError?: string | null;
   deleteConfirmOpen?: boolean;
   deletePendingPath?: string | null;
   deleteBusy?: boolean;
@@ -50,6 +58,10 @@ export type FilesViewProps = {
   onSetPreviewImageBackground?: (mode: "checker" | "dark" | "light") => void;
   onSetPreviewPanelSize?: (width: number, height: number) => void;
   onSetPreviewOffset?: (x: number, y: number) => void;
+  onStartEdit?: () => void;
+  onEditDraftChange?: (next: string) => void;
+  onDiscardEdit?: () => void;
+  onSaveEdit?: () => void | Promise<void>;
   onCopyPreviewText?: () => void | Promise<void>;
   onConfirmDelete?: () => void;
   onCancelDelete?: () => void;
@@ -187,6 +199,43 @@ function resolveFileIconName(entryPath: string, isDir: boolean): IconName {
   return "materialDraft";
 }
 
+function isDesktopFilesLayout() {
+  return window.innerWidth > 960;
+}
+
+function handleFileActivate(path: string, props: FilesViewProps) {
+  props.onSelectPath?.(path);
+  if (isDesktopFilesLayout()) {
+    props.onPreview?.(path);
+  }
+}
+
+function renderParentRow(props: FilesViewProps) {
+  if (props.path === "/") {
+    return nothing;
+  }
+  return html`<div
+    class="files-row files-row--dir files-row--parent"
+    role="button"
+    tabindex="0"
+    @click=${() => props.onOpenParent()}
+    @keydown=${(event: KeyboardEvent) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      event.preventDefault();
+      props.onOpenParent();
+    }}
+  >
+    <div class="files-row__name" title="Go to parent directory">
+      ${renderFilesIcon("materialFolder", "files-icon files-icon--row", "materialFolder")}
+      <span>....</span>
+    </div>
+    <div class="files-row__path">Parent directory</div>
+    <div class="files-row__actions"></div>
+  </div>`;
+}
+
 function renderRow(entry: string, props: FilesViewProps) {
   const isDir = entry.endsWith("/");
   const normalized = entry.startsWith("/") ? entry : joinPath(props.path, entry);
@@ -198,7 +247,7 @@ function renderRow(entry: string, props: FilesViewProps) {
     class="files-row ${isDir ? "files-row--dir" : "files-row--file"} ${isContextTarget ? "files-row--active" : ""} ${isSelected ? "files-row--selected" : ""}"
     role=${isDir ? "button" : nothing}
     tabindex=${isDir ? "0" : nothing}
-    @click=${isDir ? () => props.onOpenDir(normalized) : () => props.onSelectPath?.(normalized)}
+    @click=${isDir ? () => props.onOpenDir(normalized) : () => handleFileActivate(normalized, props)}
     @keydown=${
       isDir
         ? (event: KeyboardEvent) => {
@@ -210,7 +259,7 @@ function renderRow(entry: string, props: FilesViewProps) {
           }
         : undefined
     }
-    @dblclick=${!isDir ? () => props.onPreview?.(normalized) : undefined}
+    @dblclick=${undefined}
     @pointerdown=${!isDir ? (event: PointerEvent) => startFileLongPress(event, normalized, props) : undefined}
     @pointerup=${!isDir ? () => clearLongPressTimer() : undefined}
     @pointercancel=${!isDir ? () => clearLongPressTimer() : undefined}
@@ -300,6 +349,46 @@ function handleFilesListKeydown(event: KeyboardEvent, props: FilesViewProps) {
 }
 
 export function renderFiles(props: FilesViewProps) {
+  const desktopLayout = isDesktopFilesLayout();
+  const previewTemplate = renderFilesPreview({
+    open: Boolean(props.previewOpen),
+    embedded: desktopLayout,
+    path: props.previewPath ?? null,
+    kind: props.previewKind ?? null,
+    loading: Boolean(props.previewLoading),
+    error: props.previewError ?? null,
+    text: props.previewText ?? null,
+    imageDataUrl: props.previewImageDataUrl ?? null,
+    fileName: props.previewFileName ?? null,
+    fileSize: props.previewFileSize ?? null,
+    mimeType: props.previewMimeType ?? null,
+    panelWidth: props.previewPanelWidth,
+    panelHeight: props.previewPanelHeight,
+    dockMode: props.previewDockMode ?? "corner",
+    imageMode: props.previewImageMode ?? "fit",
+    markdownMode: props.previewMarkdownMode ?? "render",
+    imageBackground: props.previewImageBackground ?? "checker",
+    offsetX: props.previewOffsetX ?? 0,
+    offsetY: props.previewOffsetY ?? 0,
+    editMode: props.editMode ?? false,
+    editDraft: props.editDraft ?? "",
+    editDirty: props.editDirty ?? false,
+    editSaving: props.editSaving ?? false,
+    editError: props.editError ?? null,
+    onClose: () => props.onClosePreview?.(),
+    onSetDockMode: (mode) => props.onSetPreviewDockMode?.(mode),
+    onSetImageMode: (mode) => props.onSetPreviewImageMode?.(mode),
+    onSetMarkdownMode: (mode) => props.onSetPreviewMarkdownMode?.(mode),
+    onSetImageBackground: (mode) => props.onSetPreviewImageBackground?.(mode),
+    onSetPanelSize: (width, height) => props.onSetPreviewPanelSize?.(width, height),
+    onSetOffset: (x, y) => props.onSetPreviewOffset?.(x, y),
+    onStartEdit: () => props.onStartEdit?.(),
+    onEditDraftChange: (next) => props.onEditDraftChange?.(next),
+    onDiscardEdit: () => props.onDiscardEdit?.(),
+    onSaveEdit: () => props.onSaveEdit?.(),
+    onCopyText: () => props.onCopyPreviewText?.(),
+  });
+
   return html`<section class="panel files-panel">
     <div class="files-toolbar">
       <button class="btn btn--sm" ?disabled=${props.loading} @click=${props.onOpenParent}>Up</button>
@@ -307,43 +396,29 @@ export function renderFiles(props: FilesViewProps) {
       <span class="files-path">${props.path}</span>
     </div>
     ${props.error ? html`<div class="callout danger">${props.error}</div>` : ""}
-    ${
-      props.loading
-        ? html`
-            <div class="files-empty">Loading…</div>
-          `
-        : props.entries.length
-          ? html`<div class="files-list" tabindex="0" @keydown=${(event: KeyboardEvent) => handleFilesListKeydown(event, props)}>${props.entries.map((entry) => renderRow(entry, props))}</div>`
-          : html`
-              <div class="files-empty">No files</div>
+    <div class="files-layout ${desktopLayout ? "files-layout--desktop" : "files-layout--mobile"}">
+      ${
+        props.loading
+          ? html`
+              <div class="files-empty">Loading…</div>
             `
-    }
+          : html`<div class="files-list-pane">
+              ${
+                props.entries.length || props.path !== "/"
+                  ? html`<div class="files-list" tabindex="0" @keydown=${(event: KeyboardEvent) => handleFilesListKeydown(event, props)}>
+                      ${renderParentRow(props)}
+                      ${props.entries.map((entry) => renderRow(entry, props))}
+                    </div>`
+                  : html`
+                      <div class="files-empty">No files</div>
+                    `
+              }
+            </div>`
+      }
+      ${desktopLayout ? html`<div class="files-detail-pane">${previewTemplate}</div>` : nothing}
+    </div>
     ${renderContextMenu(props)}
-    ${renderFilesPreview({
-      open: Boolean(props.previewOpen),
-      path: props.previewPath ?? null,
-      kind: props.previewKind ?? null,
-      loading: Boolean(props.previewLoading),
-      error: props.previewError ?? null,
-      text: props.previewText ?? null,
-      imageDataUrl: props.previewImageDataUrl ?? null,
-      panelWidth: props.previewPanelWidth,
-      panelHeight: props.previewPanelHeight,
-      dockMode: props.previewDockMode ?? "corner",
-      imageMode: props.previewImageMode ?? "fit",
-      markdownMode: props.previewMarkdownMode ?? "render",
-      imageBackground: props.previewImageBackground ?? "checker",
-      offsetX: props.previewOffsetX ?? 0,
-      offsetY: props.previewOffsetY ?? 0,
-      onClose: () => props.onClosePreview?.(),
-      onSetDockMode: (mode) => props.onSetPreviewDockMode?.(mode),
-      onSetImageMode: (mode) => props.onSetPreviewImageMode?.(mode),
-      onSetMarkdownMode: (mode) => props.onSetPreviewMarkdownMode?.(mode),
-      onSetImageBackground: (mode) => props.onSetPreviewImageBackground?.(mode),
-      onSetPanelSize: (width, height) => props.onSetPreviewPanelSize?.(width, height),
-      onSetOffset: (x, y) => props.onSetPreviewOffset?.(x, y),
-      onCopyText: () => props.onCopyPreviewText?.(),
-    })}
+    ${desktopLayout ? nothing : previewTemplate}
     ${renderFilesDeleteConfirm({
       open: Boolean(props.deleteConfirmOpen),
       path: props.deletePendingPath ?? null,

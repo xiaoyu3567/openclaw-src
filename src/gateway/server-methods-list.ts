@@ -51,6 +51,7 @@ const BASE_METHODS = [
   "workspace.files.upload",
   "workspace.files.download",
   "workspace.files.preview",
+  "workspace.files.write",
   "workspace.files.delete",
   "workspace.files.state.get",
   "workspace.files.state.set",

@@ -85,6 +85,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "workspace.files.list",
     "workspace.files.download",
     "workspace.files.preview",
+    "workspace.files.write",
     "workspace.files.state.get",
   ],
   [WRITE_SCOPE]: [

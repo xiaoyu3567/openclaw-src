@@ -221,6 +221,8 @@ function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
 
 export function renderApp(state: AppViewState) {
   const openClawVersion =
+    (typeof state.hello?.server?.displayVersion === "string" &&
+      state.hello.server.displayVersion.trim()) ||
     (typeof state.hello?.server?.version === "string" && state.hello.server.version.trim()) ||
     state.updateAvailable?.currentVersion ||
     t("common.na");
@@ -540,6 +542,9 @@ export function renderApp(state: AppViewState) {
                 previewError: state.filesPreviewError,
                 previewText: state.filesPreviewText,
                 previewImageDataUrl: state.filesPreviewImageDataUrl,
+                previewFileName: state.filesPreviewFileName,
+                previewFileSize: state.filesPreviewFileSize,
+                previewMimeType: state.filesPreviewMimeType,
                 previewPanelWidth: state.filesPreviewPanelWidth,
                 previewPanelHeight: state.filesPreviewPanelHeight,
                 previewDockMode: state.filesPreviewDockMode,
@@ -548,6 +553,11 @@ export function renderApp(state: AppViewState) {
                 previewImageBackground: state.filesPreviewImageBackground,
                 previewOffsetX: state.filesPreviewOffsetX,
                 previewOffsetY: state.filesPreviewOffsetY,
+                editMode: state.filesEditMode,
+                editDraft: state.filesEditDraft,
+                editDirty: state.filesEditDirty,
+                editSaving: state.filesEditSaving,
+                editError: state.filesEditError,
                 deleteConfirmOpen: state.filesDeleteConfirmOpen,
                 deletePendingPath: state.filesDeletePendingPath,
                 deleteBusy: state.filesDeleteBusy,
@@ -567,6 +577,10 @@ export function renderApp(state: AppViewState) {
                 onSetPreviewMarkdownMode: (mode) => state.setFilesPreviewMarkdownMode(mode),
                 onSetPreviewImageBackground: (mode) => state.setFilesPreviewImageBackground(mode),
                 onSetPreviewOffset: (x, y) => state.setFilesPreviewOffset(x, y),
+                onStartEdit: () => state.startEditingFile(),
+                onEditDraftChange: (next) => state.updateEditingDraft(next),
+                onDiscardEdit: () => state.discardEditingFile(),
+                onSaveEdit: () => void state.saveEditedFile(),
                 onCopyPreviewText: () => void state.copyFilesPreviewText(),
                 onConfirmDelete: () => void state.confirmDeleteFile(),
                 onCancelDelete: () => state.cancelDeleteFile(),

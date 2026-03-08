@@ -3,6 +3,7 @@ import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { icon, type IconName } from "../icons.ts";
 import { toSanitizedMarkdownHtml } from "../markdown.ts";
 import type { PreviewDockMode, PreviewImageMode } from "../storage.ts";
+import { formatBytes } from "./agents-utils.ts";
 import { isCodePreviewPath, renderHighlightedCodeHtml } from "./files-code-highlight.ts";
 
 function stopPreviewEvent(event: Event) {
@@ -42,12 +43,21 @@ window.addEventListener("pointercancel", stopPreviewDrag);
 
 export type FilesPreviewProps = {
   open: boolean;
+  embedded?: boolean;
   path: string | null;
   kind: "text" | "markdown" | "image" | "unsupported" | "too_large" | null;
   loading: boolean;
   error: string | null;
   text: string | null;
   imageDataUrl?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  mimeType?: string | null;
+  editMode?: boolean;
+  editDraft?: string;
+  editDirty?: boolean;
+  editSaving?: boolean;
+  editError?: string | null;
   panelWidth?: number;
   panelHeight?: number;
   dockMode: PreviewDockMode;
@@ -63,10 +73,17 @@ export type FilesPreviewProps = {
   onSetImageBackground?: (mode: "checker" | "dark" | "light") => void;
   onSetPanelSize?: (width: number, height: number) => void;
   onSetOffset?: (x: number, y: number) => void;
+  onStartEdit?: () => void;
+  onEditDraftChange?: (next: string) => void;
+  onDiscardEdit?: () => void;
+  onSaveEdit?: () => void | Promise<void>;
   onCopyText?: () => void | Promise<void>;
 };
 
 function resolvePreviewStyle(props: FilesPreviewProps): string {
+  if (props.embedded) {
+    return "";
+  }
   const isCompact = window.innerWidth <= 720;
   if (isCompact) {
     return "";
@@ -93,11 +110,42 @@ function renderPreviewAction(
   </button>`;
 }
 
+function renderFileInfo(props: FilesPreviewProps) {
+  if (!props.path && !props.fileName) {
+    return nothing;
+  }
+  return html`
+    <div class="files-preview__meta card">
+      <div class="files-preview__meta-grid">
+        <div><span class="muted">Name</span><strong>${props.fileName ?? props.path ?? "-"}</strong></div>
+        <div><span class="muted">Type</span><strong>${props.kind ?? "-"}</strong></div>
+        <div><span class="muted">Size</span><strong>${formatBytes(props.fileSize ?? undefined)}</strong></div>
+        <div><span class="muted">MIME</span><strong>${props.mimeType ?? "-"}</strong></div>
+        <div class="files-preview__meta-path"><span class="muted">Path</span><strong class="mono">${props.path ?? "-"}</strong></div>
+      </div>
+    </div>
+  `;
+}
+
 function renderHeaderActions(props: FilesPreviewProps, isCodePreview: boolean) {
+  const editable = props.kind === "text" || props.kind === "markdown";
   return html`
     <div class="files-preview__header-actions">
       ${
-        isCodePreview || props.kind === "markdown"
+        editable && !props.editMode
+          ? renderPreviewAction("Edit", "materialCode", () => props.onStartEdit?.())
+          : nothing
+      }
+      ${
+        props.editMode
+          ? html`
+              ${renderPreviewAction("Save", "materialDescription", () => props.onSaveEdit?.(), !props.editSaving && Boolean(props.editDirty))}
+              ${renderPreviewAction("Discard", "materialClose", () => props.onDiscardEdit?.())}
+            `
+          : nothing
+      }
+      ${
+        !props.editMode && (isCodePreview || props.kind === "markdown")
           ? renderPreviewAction("Copy", "materialContentCopy", () => props.onCopyText?.())
           : nothing
       }
@@ -135,28 +183,38 @@ function renderHeaderActions(props: FilesPreviewProps, isCodePreview: boolean) {
             `
           : nothing
       }
-      ${renderPreviewAction(
-        props.dockMode === "corner" ? "Center" : "Dock",
-        props.dockMode === "corner" ? "materialCenter" : "materialDock",
-        () => props.onSetDockMode?.(props.dockMode === "corner" ? "center" : "corner"),
-      )}
-      ${renderPreviewAction("Close", "materialClose", props.onClose)}
+      ${
+        props.embedded
+          ? nothing
+          : renderPreviewAction(
+              props.dockMode === "corner" ? "Center" : "Dock",
+              props.dockMode === "corner" ? "materialCenter" : "materialDock",
+              () => props.onSetDockMode?.(props.dockMode === "corner" ? "center" : "corner"),
+            )
+      }
+      ${props.embedded ? nothing : renderPreviewAction("Close", "materialClose", props.onClose)}
     </div>
   `;
 }
 
 export function renderFilesPreview(props: FilesPreviewProps) {
-  if (!props.open) {
+  if (!props.open && !props.embedded) {
     return nothing;
+  }
+
+  if (props.embedded && !props.open) {
+    return html`
+      <div class="files-preview files-preview--embedded files-preview--empty card">
+        <div class="files-empty">Select a file to preview it here.</div>
+      </div>
+    `;
   }
 
   const isCodePreview = props.kind === "text" && isCodePreviewPath(props.path);
   const previewStyle = resolvePreviewStyle(props);
-
-  return html`
-    <div class="files-preview-overlay" @click=${props.onClose}></div>
+  const previewBody = html`
     <div
-      class="files-preview card files-preview--${props.dockMode}"
+      class="files-preview card files-preview--${props.embedded ? "embedded" : props.dockMode}"
       style=${previewStyle}
       role="dialog"
       aria-modal="true"
@@ -201,21 +259,46 @@ export function renderFilesPreview(props: FilesPreviewProps) {
               `
             : props.error
               ? html`<div class="callout danger">${props.error}</div>`
-              : props.kind === "text"
-                ? isCodePreview
-                  ? html`<pre class="code-block files-code-block"><code>${unsafeHTML(renderHighlightedCodeHtml(props.text ?? "", props.path))}</code></pre>`
-                  : html`<pre class="code-block files-code-block"><code>${props.text ?? ""}</code></pre>`
-                : props.kind === "markdown"
-                  ? props.markdownMode === "source"
-                    ? html`<pre class="code-block files-code-block"><code>${props.text ?? ""}</code></pre>`
-                    : html`<div class="chat-text files-preview__markdown">${unsafeHTML(toSanitizedMarkdownHtml(props.text ?? ""))}</div>`
-                  : props.kind === "image" && props.imageDataUrl
-                    ? html`<div class="files-preview__image-wrap files-preview__image-wrap--${props.imageMode} files-preview__image-wrap--bg-${props.imageBackground ?? "checker"}"><img src=${props.imageDataUrl} alt=${props.path ?? "Image preview"} /></div>`
-                    : html`
-                        <div class="files-empty">Preview is not available.</div>
-                      `
+              : props.editMode
+                ? html`
+                    ${props.editError ? html`<div class="callout danger">${props.editError}</div>` : nothing}
+                    <div class="files-edit-shell">
+                      <textarea
+                        class="files-edit-textarea mono"
+                        .value=${props.editDraft ?? ""}
+                        @input=${(event: Event) => props.onEditDraftChange?.((event.target as HTMLTextAreaElement).value)}
+                        spellcheck="false"
+                      ></textarea>
+                    </div>
+                  `
+                : props.kind === "text"
+                  ? isCodePreview
+                    ? html`<pre class="code-block files-code-block"><code>${unsafeHTML(renderHighlightedCodeHtml(props.text ?? "", props.path))}</code></pre>`
+                    : html`<pre class="code-block files-code-block"><code>${props.text ?? ""}</code></pre>`
+                  : props.kind === "markdown"
+                    ? props.markdownMode === "source"
+                      ? html`<pre class="code-block files-code-block"><code>${props.text ?? ""}</code></pre>`
+                      : html`<div class="chat-text files-preview__markdown">${unsafeHTML(toSanitizedMarkdownHtml(props.text ?? ""))}</div>`
+                    : props.kind === "image" && props.imageDataUrl
+                      ? html`<div class="files-preview__image-wrap files-preview__image-wrap--${props.imageMode} files-preview__image-wrap--bg-${props.imageBackground ?? "checker"}"><img src=${props.imageDataUrl} alt=${props.path ?? "Image preview"} /></div>`
+                      : html`
+                          <div class="files-empty">Preview is not available for this file type.</div>
+                        `
         }
       </div>
-    </div>
+      ${renderFileInfo(props)}
+    </div>`;
+
+  if (props.embedded) {
+    return previewBody;
+  }
+
+  if (!props.open) {
+    return nothing;
+  }
+
+  return html`
+    <div class="files-preview-overlay" @click=${props.onClose}></div>
+    ${previewBody}
   `;
 }

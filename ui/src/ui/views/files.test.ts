@@ -1,5 +1,5 @@
 import { render } from "lit";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderFiles, type FilesViewProps } from "./files.ts";
 
 function createProps(overrides: Partial<FilesViewProps> = {}): FilesViewProps {
@@ -16,8 +16,20 @@ function createProps(overrides: Partial<FilesViewProps> = {}): FilesViewProps {
   };
 }
 
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    value: width,
+    configurable: true,
+  });
+}
+
+beforeEach(() => {
+  setViewportWidth(1280);
+});
+
 afterEach(() => {
   vi.useRealTimers();
+  setViewportWidth(1280);
 });
 
 describe("files view", () => {
@@ -42,7 +54,7 @@ describe("files view", () => {
     expect(onOpenDir).toHaveBeenCalledWith("/docs/");
   });
 
-  it("selects file rows on click and previews them on double click", () => {
+  it("selects file rows and previews them on single click for desktop", () => {
     const container = document.createElement("div");
     const onSelectPath = vi.fn();
     const onPreview = vi.fn();
@@ -61,7 +73,6 @@ describe("files view", () => {
     const row = container.querySelector<HTMLElement>(".files-row--file");
     expect(row).not.toBeNull();
     row?.click();
-    row?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
 
     expect(onSelectPath).toHaveBeenCalledWith("/hello.txt");
     expect(onPreview).toHaveBeenCalledWith("/hello.txt");
@@ -80,6 +91,24 @@ describe("files view", () => {
     );
 
     expect(container.textContent).not.toContain("Open");
+  });
+
+  it("renders a parent directory row as .... at the top when not at root", () => {
+    const container = document.createElement("div");
+    render(
+      renderFiles(
+        createProps({
+          path: "/docs/notes/",
+          entries: ["child.txt"],
+        }),
+      ),
+      container,
+    );
+
+    const firstRow = container.querySelector<HTMLElement>(
+      ".files-row--parent .files-row__name span:last-child",
+    );
+    expect(firstRow?.textContent).toBe("....");
   });
 
   it("renders material-style file type icons", () => {
@@ -216,7 +245,7 @@ describe("files view", () => {
     );
 
     const menu = container.querySelector<HTMLElement>(".files-context-menu");
-    expect(menu?.getAttribute("style")).toContain("left: 832px");
+    expect(menu?.getAttribute("style")).toContain("left: 1088px");
     expect(menu?.getAttribute("style")).toContain("top: 600px");
   });
 
@@ -281,7 +310,7 @@ describe("files view", () => {
     expect(onDelete).toHaveBeenCalledWith("/hello.txt");
   });
 
-  it("renders plain text preview content inside floating overlay", () => {
+  it("renders desktop preview in the right detail pane", () => {
     const container = document.createElement("div");
     render(
       renderFiles(
@@ -292,6 +321,9 @@ describe("files view", () => {
           previewPath: "/hello.txt",
           previewKind: "text",
           previewText: "console.log('ok');",
+          previewFileName: "hello.txt",
+          previewFileSize: 21,
+          previewMimeType: "text/plain",
           previewPanelWidth: 760,
           previewPanelHeight: 540,
         }),
@@ -299,16 +331,18 @@ describe("files view", () => {
       container,
     );
 
-    const preview = container.querySelector<HTMLElement>(".files-preview[role='dialog']");
-    expect(container.querySelector(".files-preview-overlay")).not.toBeNull();
-    expect(preview).not.toBeNull();
-    expect(preview?.getAttribute("style")).toContain("width: 760px");
-    expect(preview?.getAttribute("style")).toContain("height: 540px");
-    expect(container.textContent).toContain("Preview");
+    const detailPane = container.querySelector(".files-detail-pane");
+    const preview = container.querySelector<HTMLElement>(".files-detail-pane .files-preview");
+    expect(detailPane).not.toBeNull();
+    expect(container.querySelector(".files-preview-overlay")).toBeNull();
+    expect(preview?.className).toContain("files-preview--embedded");
     expect(container.textContent).toContain("console.log('ok');");
+    expect(container.textContent).toContain("hello.txt");
+    expect(container.textContent).toContain("text/plain");
   });
 
-  it("closes preview from overlay clicks but not from dialog clicks", () => {
+  it("keeps mobile overlay preview behavior", () => {
+    setViewportWidth(640);
     const container = document.createElement("div");
     const onClosePreview = vi.fn();
     render(
@@ -352,12 +386,11 @@ describe("files view", () => {
     expect(container.querySelector(".files-code-token--keyword")?.textContent).toContain("const");
     expect(container.querySelector(".files-code-token--number")?.textContent).toContain("42");
     expect(container.textContent).toContain("Copy");
-    expect(container.textContent).toContain("Center");
     expect(
       [
         ...container.querySelectorAll<HTMLElement>(".files-preview__header-actions .files-icon"),
       ].map((el) => el.dataset.icon ?? ""),
-    ).toEqual(["materialContentCopy", "materialCenter", "materialClose"]);
+    ).toEqual(["materialCode", "materialContentCopy"]);
   });
 
   it("renders markdown preview content", () => {
@@ -385,12 +418,7 @@ describe("files view", () => {
       [
         ...container.querySelectorAll<HTMLElement>(".files-preview__header-actions .files-icon"),
       ].map((el) => el.dataset.icon ?? ""),
-    ).toContain("materialVisibility");
-    expect(
-      [
-        ...container.querySelectorAll<HTMLElement>(".files-preview__header-actions .files-icon"),
-      ].map((el) => el.dataset.icon ?? ""),
-    ).toContain("materialCode");
+    ).toEqual(["materialCode", "materialContentCopy", "materialVisibility", "materialCode"]);
   });
 
   it("renders markdown source mode when requested", () => {
@@ -415,7 +443,30 @@ describe("files view", () => {
     expect(container.querySelector(".files-code-block")).not.toBeNull();
   });
 
-  it("renders image preview content with fit controls", () => {
+  it("renders inline editing controls for editable files", () => {
+    const container = document.createElement("div");
+    render(
+      renderFiles(
+        createProps({
+          path: "/",
+          entries: ["hello.ts"],
+          previewOpen: true,
+          previewPath: "/hello.ts",
+          previewKind: "text",
+          editMode: true,
+          editDraft: "const answer = 42;",
+          previewText: "const answer = 42;",
+        }),
+      ),
+      container,
+    );
+
+    expect(container.textContent).toContain("Save");
+    expect(container.textContent).toContain("Discard");
+    expect(container.querySelector(".files-edit-textarea")).not.toBeNull();
+  });
+
+  it("renders image preview content with file info below it", () => {
     const container = document.createElement("div");
     render(
       renderFiles(
@@ -426,15 +477,16 @@ describe("files view", () => {
           previewPath: "/cat.png",
           previewKind: "image",
           previewImageDataUrl: "data:image/png;base64,ZmFrZQ==",
+          previewFileName: "cat.png",
+          previewFileSize: 2048,
+          previewMimeType: "image/png",
           previewImageMode: "actual",
           previewImageBackground: "dark",
-          previewDockMode: "center",
         }),
       ),
       container,
     );
 
-    const preview = container.querySelector<HTMLElement>(".files-preview");
     const imageWrap = container.querySelector<HTMLElement>(".files-preview__image-wrap");
     const image = container.querySelector<HTMLImageElement>(".files-preview__image-wrap img");
     expect(image?.getAttribute("src")).toBe("data:image/png;base64,ZmFrZQ==");
@@ -443,11 +495,32 @@ describe("files view", () => {
     expect(container.textContent).toContain("Checker");
     expect(container.textContent).toContain("Dark");
     expect(container.textContent).toContain("Light");
-    expect(preview?.className).toContain("files-preview--center");
-    expect(preview?.getAttribute("style")).toContain(
-      "transform: translate(calc(-50% + 0px), calc(-50% + 0px))",
-    );
+    expect(container.textContent).toContain("cat.png");
+    expect(container.textContent).toContain("image/png");
     expect(imageWrap?.className).toContain("files-preview__image-wrap--bg-dark");
+  });
+
+  it("shows file information when preview is unsupported", () => {
+    const container = document.createElement("div");
+    render(
+      renderFiles(
+        createProps({
+          path: "/",
+          entries: ["archive.bin"],
+          previewOpen: true,
+          previewPath: "/archive.bin",
+          previewKind: "unsupported",
+          previewFileName: "archive.bin",
+          previewFileSize: 4096,
+          previewMimeType: "application/octet-stream",
+        }),
+      ),
+      container,
+    );
+
+    expect(container.textContent).toContain("Preview is not available for this file type.");
+    expect(container.textContent).toContain("archive.bin");
+    expect(container.textContent).toContain("application/octet-stream");
   });
 
   it("renders stronger delete confirmation copy", () => {

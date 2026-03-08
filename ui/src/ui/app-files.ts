@@ -4,6 +4,7 @@ import type {
   WorkspaceFilesListResult,
   WorkspaceFilesPreviewResult,
   WorkspaceFilesStateResult,
+  WorkspaceFilesWriteResult,
 } from "./types.ts";
 
 export type FilesMenuPosition = {
@@ -32,11 +33,22 @@ export type FilesHost = {
   filesPreviewError: string | null;
   filesPreviewText: string | null;
   filesPreviewImageDataUrl: string | null;
+  filesPreviewFileName: string | null;
+  filesPreviewFileSize: number | null;
   filesPreviewMimeType: string | null;
+  filesPreviewPanelWidth: number;
+  filesPreviewPanelHeight: number;
+  filesPreviewDockMode: "corner" | "center";
+  filesPreviewImageMode: "fit" | "actual";
   filesPreviewMarkdownMode: "render" | "source";
   filesPreviewImageBackground: "checker" | "dark" | "light";
   filesPreviewOffsetX: number;
   filesPreviewOffsetY: number;
+  filesEditMode: boolean;
+  filesEditDraft: string;
+  filesEditDirty: boolean;
+  filesEditSaving: boolean;
+  filesEditError: string | null;
   filesDeleteConfirmOpen: boolean;
   filesDeletePendingPath: string | null;
   filesDeleteBusy: boolean;
@@ -177,6 +189,14 @@ export function closeFilesContextMenu(host: FilesHost) {
   host.filesContextMenuPosition = null;
 }
 
+function resetFilesEditState(host: FilesHost) {
+  host.filesEditMode = false;
+  host.filesEditDraft = "";
+  host.filesEditDirty = false;
+  host.filesEditSaving = false;
+  host.filesEditError = null;
+}
+
 export function closeFilesPreview(host: FilesHost) {
   host.filesPreviewOpen = false;
   host.filesPreviewPath = null;
@@ -185,10 +205,13 @@ export function closeFilesPreview(host: FilesHost) {
   host.filesPreviewError = null;
   host.filesPreviewText = null;
   host.filesPreviewImageDataUrl = null;
+  host.filesPreviewFileName = null;
+  host.filesPreviewFileSize = null;
   host.filesPreviewMimeType = null;
   host.filesPreviewMarkdownMode = "render";
   host.filesPreviewOffsetX = 0;
   host.filesPreviewOffsetY = 0;
+  resetFilesEditState(host);
 }
 
 export function setFilesPreviewMarkdownMode(host: FilesHost, mode: "render" | "source") {
@@ -207,6 +230,54 @@ export function setFilesPreviewOffset(host: FilesHost, x: number, y: number) {
   host.filesPreviewOffsetY = y;
 }
 
+export function startEditingFile(host: FilesHost) {
+  if (host.filesPreviewKind !== "text" && host.filesPreviewKind !== "markdown") {
+    return;
+  }
+  host.filesEditMode = true;
+  host.filesEditDraft = host.filesPreviewText ?? "";
+  host.filesEditDirty = false;
+  host.filesEditSaving = false;
+  host.filesEditError = null;
+}
+
+export function updateEditingDraft(host: FilesHost, next: string) {
+  host.filesEditDraft = next;
+  host.filesEditDirty = next !== (host.filesPreviewText ?? "");
+}
+
+export function discardEditingFile(host: FilesHost) {
+  host.filesEditMode = false;
+  host.filesEditDraft = host.filesPreviewText ?? "";
+  host.filesEditDirty = false;
+  host.filesEditSaving = false;
+  host.filesEditError = null;
+}
+
+export async function saveEditedFile(host: FilesHost) {
+  if (!host.connected || !host.client || !host.filesPreviewPath || !host.filesEditMode) {
+    return;
+  }
+  host.filesEditSaving = true;
+  host.filesEditError = null;
+  try {
+    const result = await host.client.request<WorkspaceFilesWriteResult>("workspace.files.write", {
+      sessionKey: host.sessionKey,
+      agentId: resolveAgentId(host.sessionKey),
+      path: host.filesPreviewPath,
+      content: host.filesEditDraft,
+    });
+    host.filesPreviewText = host.filesEditDraft;
+    host.filesPreviewFileSize = result.size;
+    host.filesEditMode = false;
+    host.filesEditDirty = false;
+  } catch (err) {
+    host.filesEditError = `Failed to save file: ${err instanceof Error ? err.message : String(err)}`;
+  } finally {
+    host.filesEditSaving = false;
+  }
+}
+
 export async function previewFile(host: FilesHost, filePath: string) {
   if (!host.connected || !host.client) {
     return;
@@ -219,7 +290,16 @@ export async function previewFile(host: FilesHost, filePath: string) {
   host.filesPreviewError = null;
   host.filesPreviewText = null;
   host.filesPreviewImageDataUrl = null;
+  host.filesPreviewFileName = null;
+  host.filesPreviewFileSize = null;
   host.filesPreviewMimeType = null;
+  host.filesPreviewOffsetX = 0;
+  host.filesPreviewOffsetY = 0;
+  resetFilesEditState(host);
+  if (window.innerWidth > 720) {
+    host.filesPreviewMarkdownMode = "render";
+    host.filesPreviewDockMode = "center";
+  }
 
   try {
     const result = await host.client.request<WorkspaceFilesPreviewResult>(
@@ -231,6 +311,8 @@ export async function previewFile(host: FilesHost, filePath: string) {
       },
     );
     host.filesPreviewKind = result.kind;
+    host.filesPreviewFileName = result.fileName;
+    host.filesPreviewFileSize = result.size;
     host.filesPreviewMimeType = result.mimeType;
     host.filesPreviewText =
       result.kind === "text" || result.kind === "markdown" ? (result.text ?? "") : null;

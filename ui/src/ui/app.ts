@@ -35,6 +35,7 @@ import {
   closeFilesContextMenu as closeFilesContextMenuInternal,
   closeFilesPreview as closeFilesPreviewInternal,
   confirmDeleteFile as confirmDeleteFileInternal,
+  discardEditingFile as discardEditingFileInternal,
   downloadFile as downloadFileInternal,
   loadFilesView as loadFilesViewInternal,
   openFilesContextMenu as openFilesContextMenuInternal,
@@ -42,10 +43,13 @@ import {
   previewFile as previewFileInternal,
   requestDeleteFile as requestDeleteFileInternal,
   resolveParentDir,
+  saveEditedFile as saveEditedFileInternal,
   selectFilesPath as selectFilesPathInternal,
   setFilesPreviewImageBackground as setFilesPreviewImageBackgroundInternal,
   setFilesPreviewMarkdownMode as setFilesPreviewMarkdownModeInternal,
   setFilesPreviewOffset as setFilesPreviewOffsetInternal,
+  startEditingFile as startEditingFileInternal,
+  updateEditingDraft as updateEditingDraftInternal,
   type FilesMenuPosition,
 } from "./app-files.ts";
 import { connectGateway as connectGatewayInternal } from "./app-gateway.ts";
@@ -221,6 +225,8 @@ export class OpenClawApp extends LitElement {
   @state() filesPreviewError: string | null = null;
   @state() filesPreviewText: string | null = null;
   @state() filesPreviewImageDataUrl: string | null = null;
+  @state() filesPreviewFileName: string | null = null;
+  @state() filesPreviewFileSize: number | null = null;
   @state() filesPreviewMimeType: string | null = null;
   @state() filesPreviewPanelWidth = this.settings.filesPreviewPanelWidth;
   @state() filesPreviewPanelHeight = this.settings.filesPreviewPanelHeight;
@@ -230,6 +236,11 @@ export class OpenClawApp extends LitElement {
   @state() filesPreviewImageBackground: "checker" | "dark" | "light" = "checker";
   @state() filesPreviewOffsetX = 0;
   @state() filesPreviewOffsetY = 0;
+  @state() filesEditMode = false;
+  @state() filesEditDraft = "";
+  @state() filesEditDirty = false;
+  @state() filesEditSaving = false;
+  @state() filesEditError: string | null = null;
   @state() filesDeleteConfirmOpen = false;
   @state() filesDeletePendingPath: string | null = null;
   @state() filesDeleteBusy = false;
@@ -693,6 +704,25 @@ export class OpenClawApp extends LitElement {
       x,
       y,
     );
+  }
+
+  startEditingFile() {
+    startEditingFileInternal(this as unknown as Parameters<typeof startEditingFileInternal>[0]);
+  }
+
+  updateEditingDraft(next: string) {
+    updateEditingDraftInternal(
+      this as unknown as Parameters<typeof updateEditingDraftInternal>[0],
+      next,
+    );
+  }
+
+  discardEditingFile() {
+    discardEditingFileInternal(this as unknown as Parameters<typeof discardEditingFileInternal>[0]);
+  }
+
+  async saveEditedFile() {
+    await saveEditedFileInternal(this as unknown as Parameters<typeof saveEditedFileInternal>[0]);
   }
 
   async copyFilesPreviewText() {

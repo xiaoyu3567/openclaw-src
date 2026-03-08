@@ -104,6 +104,8 @@ export type AppViewState = {
   filesPreviewError: string | null;
   filesPreviewText: string | null;
   filesPreviewImageDataUrl: string | null;
+  filesPreviewFileName: string | null;
+  filesPreviewFileSize: number | null;
   filesPreviewMimeType: string | null;
   filesPreviewPanelWidth: number;
   filesPreviewPanelHeight: number;
@@ -113,6 +115,11 @@ export type AppViewState = {
   filesPreviewImageBackground: "checker" | "dark" | "light";
   filesPreviewOffsetX: number;
   filesPreviewOffsetY: number;
+  filesEditMode: boolean;
+  filesEditDraft: string;
+  filesEditDirty: boolean;
+  filesEditSaving: boolean;
+  filesEditError: string | null;
   filesDeleteConfirmOpen: boolean;
   filesDeletePendingPath: string | null;
   filesDeleteBusy: boolean;
@@ -354,6 +361,10 @@ export type AppViewState = {
   setFilesPreviewMarkdownMode: (mode: "render" | "source") => void;
   setFilesPreviewImageBackground: (mode: "checker" | "dark" | "light") => void;
   setFilesPreviewOffset: (x: number, y: number) => void;
+  startEditingFile: () => void;
+  updateEditingDraft: (next: string) => void;
+  discardEditingFile: () => void;
+  saveEditedFile: () => Promise<void>;
   copyFilesPreviewText: () => Promise<void>;
   requestDeleteFile: (path: string) => void;
   cancelDeleteFile: () => void;

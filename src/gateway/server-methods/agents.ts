@@ -66,6 +66,7 @@ const WORKSPACE_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
 const WORKSPACE_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024;
 const WORKSPACE_PREVIEW_TEXT_MAX_BYTES = 300 * 1024;
 const WORKSPACE_PREVIEW_IMAGE_MAX_BYTES = 15 * 1024 * 1024;
+const WORKSPACE_WRITE_TEXT_MAX_BYTES = 2 * 1024 * 1024;
 const WORKSPACE_FILES_UI_STATE_RELATIVE_PATH = path.join(".openclaw", "files-ui.json");
 const WORKSPACE_PREVIEW_TEXT_EXTENSIONS = new Set([
   ".txt",
@@ -1164,6 +1165,55 @@ export const agentsHandlers: GatewayRequestHandlers = {
       );
     } catch {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "failed to read file"));
+    }
+  },
+  "workspace.files.write": async ({ params, respond }) => {
+    const body = params && typeof params === "object" ? params : {};
+    const filePathRaw = typeof body.path === "string" ? body.path.trim() : "";
+    const content = typeof body.content === "string" ? body.content : null;
+    if (!filePathRaw) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "path is required"));
+      return;
+    }
+    if (content == null) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "content is required"));
+      return;
+    }
+
+    const filePath = path.resolve(filePathRaw);
+    const contentBytes = Buffer.byteLength(content, "utf8");
+    if (contentBytes > WORKSPACE_WRITE_TEXT_MAX_BYTES) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "content too large"));
+      return;
+    }
+
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
+    try {
+      stat = await fs.stat(filePath);
+    } catch {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "file not found"));
+      return;
+    }
+    if (!stat.isFile()) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "path is not a file"));
+      return;
+    }
+
+    try {
+      await fs.writeFile(filePath, content, "utf8");
+      const nextStat = await fs.stat(filePath);
+      respond(
+        true,
+        {
+          ok: true,
+          path: filePath,
+          size: nextStat.size,
+          updatedAtMs: nextStat.mtimeMs,
+        },
+        undefined,
+      );
+    } catch {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "failed to write file"));
     }
   },
   "workspace.files.delete": async ({ params, respond }) => {

@@ -31,13 +31,6 @@ export const XHIGH_MODEL_REFS = [
   "github-copilot/gpt-5.2",
 ] as const;
 
-const XHIGH_MODEL_SET = new Set(XHIGH_MODEL_REFS.map((entry) => entry.toLowerCase()));
-const XHIGH_MODEL_IDS = new Set(
-  XHIGH_MODEL_REFS.map((entry) => entry.split("/")[1]?.toLowerCase()).filter(
-    (entry): entry is string => Boolean(entry),
-  ),
-);
-
 // Normalize user-provided thinking level strings to the canonical enum.
 export function normalizeThinkLevel(raw?: string | null): ThinkLevel | undefined {
   if (!raw) {
@@ -74,16 +67,8 @@ export function normalizeThinkLevel(raw?: string | null): ThinkLevel | undefined
   return undefined;
 }
 
-export function supportsXHighThinking(provider?: string | null, model?: string | null): boolean {
-  const modelKey = model?.trim().toLowerCase();
-  if (!modelKey) {
-    return false;
-  }
-  const providerKey = provider?.trim().toLowerCase();
-  if (providerKey) {
-    return XHIGH_MODEL_SET.has(`${providerKey}/${modelKey}`);
-  }
-  return XHIGH_MODEL_IDS.has(modelKey);
+export function supportsXHighThinking(_provider?: string | null, _model?: string | null): boolean {
+  return true;
 }
 
 export function listThinkingLevels(provider?: string | null, model?: string | null): ThinkLevel[] {

@@ -55,6 +55,7 @@ export type GatewayHelloOk = {
   protocol: number;
   server?: {
     version?: string;
+    displayVersion?: string;
     connId?: string;
   };
   features?: { methods?: string[]; events?: string[] };

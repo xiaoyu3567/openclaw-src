@@ -13,8 +13,26 @@ const PACKAGE_JSON_CANDIDATES = [
 const BUILD_INFO_CANDIDATES = [
   "../build-info.json",
   "../../build-info.json",
+  "../../../build-info.json",
   "./build-info.json",
 ] as const;
+
+type BuildInfoLike = {
+  version?: string;
+  displayVersion?: string;
+  builtAt?: string;
+};
+
+function formatDisplayVersionFromBuiltAt(raw: string | undefined): string | null {
+  if (!raw?.trim()) {
+    return null;
+  }
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return `魔改 ${date.getFullYear()}.${date.getMonth() + 1}.${date.getDate()}`;
+}
 
 function readVersionFromJsonCandidates(
   moduleUrl: string,
@@ -62,6 +80,30 @@ export function readVersionFromPackageJsonForModuleUrl(moduleUrl: string): strin
 
 export function readVersionFromBuildInfoForModuleUrl(moduleUrl: string): string | null {
   return readVersionFromJsonCandidates(moduleUrl, BUILD_INFO_CANDIDATES);
+}
+
+export function readDisplayVersionFromBuildInfoForModuleUrl(moduleUrl: string): string | null {
+  try {
+    const require = createRequire(moduleUrl);
+    for (const candidate of BUILD_INFO_CANDIDATES) {
+      try {
+        const parsed = require(candidate) as BuildInfoLike;
+        const displayVersion = parsed.displayVersion?.trim();
+        if (displayVersion) {
+          return displayVersion;
+        }
+        const fallback = formatDisplayVersionFromBuiltAt(parsed.builtAt);
+        if (fallback) {
+          return fallback;
+        }
+      } catch {
+        // ignore missing or unreadable candidate
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function resolveVersionFromModuleUrl(moduleUrl: string): string | null {
