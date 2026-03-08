@@ -1123,6 +1123,78 @@
 }
 
 /* ===========================================
+   Files Code Highlight
+   =========================================== */
+
+.files-code-block {
+  margin: 0;
+}
+
+.files-code-block code {
+  display: block;
+  white-space: pre;
+}
+
+.files-code-token--comment {
+  color: #64748b;
+}
+
+.files-code-token--keyword {
+  color: #c2410c;
+  font-weight: 600;
+}
+
+.files-code-token--string {
+  color: #0f766e;
+}
+
+.files-code-token--number,
+.files-code-token--literal {
+  color: #7c3aed;
+}
+
+.files-code-token--function {
+  color: #2563eb;
+}
+
+.files-code-token--property {
+  color: #b45309;
+}
+
+.files-code-token--type {
+  color: #be185d;
+}
+
+:root[data-theme="dark"] .files-code-token--comment {
+  color: #94a3b8;
+}
+
+:root[data-theme="dark"] .files-code-token--keyword {
+  color: #fb923c;
+}
+
+:root[data-theme="dark"] .files-code-token--string {
+  color: #5eead4;
+}
+
+:root[data-theme="dark"] .files-code-token--number,
+:root[data-theme="dark"] .files-code-token--literal {
+  color: #c4b5fd;
+}
+
+:root[data-theme="dark"] .files-code-token--function {
+  color: #93c5fd;
+}
+
+:root[data-theme="dark"] .files-code-token--property {
+  color: #fbbf24;
+}
+
+:root[data-theme="dark"] .files-code-token--type {
+  color: #f9a8d4;
+}
+
+/* ===========================================
    Lists
    =========================================== */
 

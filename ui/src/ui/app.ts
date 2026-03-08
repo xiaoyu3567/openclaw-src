@@ -31,10 +31,22 @@ import {
 import { DEFAULT_CRON_FORM, DEFAULT_LOG_LEVEL_FILTERS } from "./app-defaults.ts";
 import type { EventLogEntry } from "./app-events.ts";
 import {
+  cancelDeleteFile as cancelDeleteFileInternal,
+  closeFilesContextMenu as closeFilesContextMenuInternal,
+  closeFilesPreview as closeFilesPreviewInternal,
+  confirmDeleteFile as confirmDeleteFileInternal,
   downloadFile as downloadFileInternal,
   loadFilesView as loadFilesViewInternal,
+  openFilesContextMenu as openFilesContextMenuInternal,
   openFilesDirectory as openFilesDirectoryInternal,
+  previewFile as previewFileInternal,
+  requestDeleteFile as requestDeleteFileInternal,
   resolveParentDir,
+  selectFilesPath as selectFilesPathInternal,
+  setFilesPreviewImageBackground as setFilesPreviewImageBackgroundInternal,
+  setFilesPreviewMarkdownMode as setFilesPreviewMarkdownModeInternal,
+  setFilesPreviewOffset as setFilesPreviewOffsetInternal,
+  type FilesMenuPosition,
 } from "./app-files.ts";
 import { connectGateway as connectGatewayInternal } from "./app-gateway.ts";
 import {
@@ -126,6 +138,20 @@ function resolveOnboardingMode(): boolean {
 @customElement("openclaw-app")
 export class OpenClawApp extends LitElement {
   private i18nController = new I18nController(this);
+  private fileDialogsKeydownHandler = (event: KeyboardEvent) => {
+    if (event.key !== "Escape") {
+      return;
+    }
+    if (this.filesDeleteConfirmOpen) {
+      event.preventDefault();
+      this.cancelDeleteFile();
+      return;
+    }
+    if (this.filesPreviewOpen) {
+      event.preventDefault();
+      this.closeFilesPreview();
+    }
+  };
   clientInstanceId = generateUUID();
   @state() settings: UiSettings = loadSettings();
   constructor() {
@@ -183,6 +209,31 @@ export class OpenClawApp extends LitElement {
   @state() filesEntries: string[] = [];
   @state() filesLoading = false;
   @state() filesError: string | null = null;
+  @state() filesSelectedPath: string | null = null;
+  @state() filesContextMenuOpen = false;
+  @state() filesContextMenuTargetPath: string | null = null;
+  @state() filesContextMenuPosition: FilesMenuPosition | null = null;
+  @state() filesPreviewOpen = false;
+  @state() filesPreviewPath: string | null = null;
+  @state() filesPreviewKind: "text" | "markdown" | "image" | "unsupported" | "too_large" | null =
+    null;
+  @state() filesPreviewLoading = false;
+  @state() filesPreviewError: string | null = null;
+  @state() filesPreviewText: string | null = null;
+  @state() filesPreviewImageDataUrl: string | null = null;
+  @state() filesPreviewMimeType: string | null = null;
+  @state() filesPreviewPanelWidth = this.settings.filesPreviewPanelWidth;
+  @state() filesPreviewPanelHeight = this.settings.filesPreviewPanelHeight;
+  @state() filesPreviewDockMode = this.settings.filesPreviewDockMode;
+  @state() filesPreviewImageMode = this.settings.filesPreviewImageMode;
+  @state() filesPreviewMarkdownMode: "render" | "source" = "render";
+  @state() filesPreviewImageBackground: "checker" | "dark" | "light" = "checker";
+  @state() filesPreviewOffsetX = 0;
+  @state() filesPreviewOffsetY = 0;
+  @state() filesDeleteConfirmOpen = false;
+  @state() filesDeletePendingPath: string | null = null;
+  @state() filesDeleteBusy = false;
+  @state() filesDeleteError: string | null = null;
   @state() atPickerOpen = false;
   @state() atPickerQuery = "";
   @state() atPickerEntries: string[] = [];
@@ -451,6 +502,8 @@ export class OpenClawApp extends LitElement {
   private themeMedia: MediaQueryList | null = null;
   private themeMediaHandler: ((event: MediaQueryListEvent) => void) | null = null;
   private topbarObserver: ResizeObserver | null = null;
+  private filesPreviewResizeObserver: ResizeObserver | null = null;
+  private observedFilesPreviewEl: HTMLElement | null = null;
 
   createRenderRoot() {
     return this;
@@ -458,6 +511,7 @@ export class OpenClawApp extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    window.addEventListener("keydown", this.fileDialogsKeydownHandler);
     handleConnected(this as unknown as Parameters<typeof handleConnected>[0]);
   }
 
@@ -466,12 +520,19 @@ export class OpenClawApp extends LitElement {
   }
 
   disconnectedCallback() {
+    window.removeEventListener("keydown", this.fileDialogsKeydownHandler);
+    document.body.classList.remove("files-preview-open");
+    this.filesPreviewResizeObserver?.disconnect();
+    this.filesPreviewResizeObserver = null;
+    this.observedFilesPreviewEl = null;
     handleDisconnected(this as unknown as Parameters<typeof handleDisconnected>[0]);
     super.disconnectedCallback();
   }
 
   protected updated(changed: Map<PropertyKey, unknown>) {
     handleUpdated(this as unknown as Parameters<typeof handleUpdated>[0], changed);
+    document.body.classList.toggle("files-preview-open", this.filesPreviewOpen);
+    this.syncFilesPreviewResizeObserver();
   }
 
   connect() {
@@ -551,8 +612,115 @@ export class OpenClawApp extends LitElement {
     );
   }
 
+  selectFilesPath(path: string | null) {
+    selectFilesPathInternal(this as unknown as Parameters<typeof selectFilesPathInternal>[0], path);
+  }
+
   async downloadFile(path: string) {
     await downloadFileInternal(this as unknown as Parameters<typeof downloadFileInternal>[0], path);
+  }
+
+  openFilesContextMenu(path: string, position: FilesMenuPosition) {
+    openFilesContextMenuInternal(
+      this as unknown as Parameters<typeof openFilesContextMenuInternal>[0],
+      path,
+      position,
+    );
+  }
+
+  closeFilesContextMenu() {
+    closeFilesContextMenuInternal(
+      this as unknown as Parameters<typeof closeFilesContextMenuInternal>[0],
+    );
+  }
+
+  async previewFile(path: string) {
+    await previewFileInternal(this as unknown as Parameters<typeof previewFileInternal>[0], path);
+  }
+
+  closeFilesPreview() {
+    closeFilesPreviewInternal(this as unknown as Parameters<typeof closeFilesPreviewInternal>[0]);
+  }
+
+  setFilesPreviewDockMode(mode: import("./storage.ts").PreviewDockMode) {
+    if (this.filesPreviewDockMode === mode) {
+      return;
+    }
+    this.filesPreviewDockMode = mode;
+    this.applySettings({ ...this.settings, filesPreviewDockMode: mode });
+  }
+
+  setFilesPreviewImageMode(mode: import("./storage.ts").PreviewImageMode) {
+    if (this.filesPreviewImageMode === mode) {
+      return;
+    }
+    this.filesPreviewImageMode = mode;
+    this.applySettings({ ...this.settings, filesPreviewImageMode: mode });
+  }
+
+  setFilesPreviewPanelSize(width: number, height: number) {
+    const nextWidth = Math.max(420, Math.min(1400, Math.round(width)));
+    const nextHeight = Math.max(320, Math.min(1000, Math.round(height)));
+    if (this.filesPreviewPanelWidth === nextWidth && this.filesPreviewPanelHeight === nextHeight) {
+      return;
+    }
+    this.filesPreviewPanelWidth = nextWidth;
+    this.filesPreviewPanelHeight = nextHeight;
+    this.applySettings({
+      ...this.settings,
+      filesPreviewPanelWidth: nextWidth,
+      filesPreviewPanelHeight: nextHeight,
+    });
+  }
+
+  setFilesPreviewMarkdownMode(mode: "render" | "source") {
+    setFilesPreviewMarkdownModeInternal(
+      this as unknown as Parameters<typeof setFilesPreviewMarkdownModeInternal>[0],
+      mode,
+    );
+  }
+
+  setFilesPreviewImageBackground(mode: "checker" | "dark" | "light") {
+    setFilesPreviewImageBackgroundInternal(
+      this as unknown as Parameters<typeof setFilesPreviewImageBackgroundInternal>[0],
+      mode,
+    );
+  }
+
+  setFilesPreviewOffset(x: number, y: number) {
+    setFilesPreviewOffsetInternal(
+      this as unknown as Parameters<typeof setFilesPreviewOffsetInternal>[0],
+      x,
+      y,
+    );
+  }
+
+  async copyFilesPreviewText() {
+    if (!this.filesPreviewText) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(this.filesPreviewText);
+    } catch {
+      this.filesPreviewError = "Copy failed: clipboard unavailable.";
+    }
+  }
+
+  requestDeleteFile(path: string) {
+    requestDeleteFileInternal(
+      this as unknown as Parameters<typeof requestDeleteFileInternal>[0],
+      path,
+    );
+  }
+
+  cancelDeleteFile() {
+    cancelDeleteFileInternal(this as unknown as Parameters<typeof cancelDeleteFileInternal>[0]);
+  }
+
+  async confirmDeleteFile() {
+    await confirmDeleteFileInternal(
+      this as unknown as Parameters<typeof confirmDeleteFileInternal>[0],
+    );
   }
 
   async loadCron() {
@@ -759,6 +927,31 @@ export class OpenClawApp extends LitElement {
     const newRatio = Math.max(0.4, Math.min(0.7, ratio));
     this.splitRatio = newRatio;
     this.applySettings({ ...this.settings, splitRatio: newRatio });
+  }
+
+  private syncFilesPreviewResizeObserver() {
+    if (!this.filesPreviewOpen) {
+      this.filesPreviewResizeObserver?.disconnect();
+      this.observedFilesPreviewEl = null;
+      return;
+    }
+    const panel = this.querySelector<HTMLElement>(".files-preview");
+    if (!panel) {
+      return;
+    }
+    if (this.observedFilesPreviewEl === panel) {
+      return;
+    }
+    this.filesPreviewResizeObserver?.disconnect();
+    this.observedFilesPreviewEl = panel;
+    this.filesPreviewResizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry || window.innerWidth <= 720) {
+        return;
+      }
+      this.setFilesPreviewPanelSize(entry.contentRect.width, entry.contentRect.height);
+    });
+    this.filesPreviewResizeObserver.observe(panel);
   }
 
   render() {

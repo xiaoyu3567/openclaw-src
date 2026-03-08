@@ -93,6 +93,30 @@ export type AppViewState = {
   filesEntries: string[];
   filesLoading: boolean;
   filesError: string | null;
+  filesSelectedPath: string | null;
+  filesContextMenuOpen: boolean;
+  filesContextMenuTargetPath: string | null;
+  filesContextMenuPosition: import("./app-files.ts").FilesMenuPosition | null;
+  filesPreviewOpen: boolean;
+  filesPreviewPath: string | null;
+  filesPreviewKind: "text" | "markdown" | "image" | "unsupported" | "too_large" | null;
+  filesPreviewLoading: boolean;
+  filesPreviewError: string | null;
+  filesPreviewText: string | null;
+  filesPreviewImageDataUrl: string | null;
+  filesPreviewMimeType: string | null;
+  filesPreviewPanelWidth: number;
+  filesPreviewPanelHeight: number;
+  filesPreviewDockMode: import("./storage.ts").PreviewDockMode;
+  filesPreviewImageMode: import("./storage.ts").PreviewImageMode;
+  filesPreviewMarkdownMode: "render" | "source";
+  filesPreviewImageBackground: "checker" | "dark" | "light";
+  filesPreviewOffsetX: number;
+  filesPreviewOffsetY: number;
+  filesDeleteConfirmOpen: boolean;
+  filesDeletePendingPath: string | null;
+  filesDeleteBusy: boolean;
+  filesDeleteError: string | null;
   atPickerOpen: boolean;
   atPickerQuery: string;
   atPickerEntries: string[];
@@ -315,7 +339,25 @@ export type AppViewState = {
   loadFilesView: () => Promise<void>;
   openFilesDirectory: (path: string) => Promise<void>;
   openFilesParentDirectory: () => Promise<void>;
+  selectFilesPath: (path: string | null) => void;
   downloadFile: (path: string) => Promise<void>;
+  openFilesContextMenu: (
+    path: string,
+    position: import("./app-files.ts").FilesMenuPosition,
+  ) => void;
+  closeFilesContextMenu: () => void;
+  previewFile: (path: string) => Promise<void>;
+  closeFilesPreview: () => void;
+  setFilesPreviewDockMode: (mode: import("./storage.ts").PreviewDockMode) => void;
+  setFilesPreviewImageMode: (mode: import("./storage.ts").PreviewImageMode) => void;
+  setFilesPreviewPanelSize: (width: number, height: number) => void;
+  setFilesPreviewMarkdownMode: (mode: "render" | "source") => void;
+  setFilesPreviewImageBackground: (mode: "checker" | "dark" | "light") => void;
+  setFilesPreviewOffset: (x: number, y: number) => void;
+  copyFilesPreviewText: () => Promise<void>;
+  requestDeleteFile: (path: string) => void;
+  cancelDeleteFile: () => void;
+  confirmDeleteFile: () => Promise<void>;
   loadAssistantIdentity: () => Promise<void>;
   loadCron: () => Promise<void>;
   handleWhatsAppStart: (force: boolean) => Promise<void>;

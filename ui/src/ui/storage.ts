@@ -3,6 +3,9 @@ const KEY = "openclaw.control.settings.v1";
 import { isSupportedLocale } from "../i18n/index.ts";
 import type { ThemeMode } from "./theme.ts";
 
+export type PreviewDockMode = "corner" | "center";
+export type PreviewImageMode = "fit" | "actual";
+
 export type UiSettings = {
   gatewayUrl: string;
   token: string;
@@ -14,6 +17,10 @@ export type UiSettings = {
   splitRatio: number; // Sidebar split ratio (0.4 to 0.7, default 0.6)
   navCollapsed: boolean; // Collapsible sidebar state
   navGroupsCollapsed: Record<string, boolean>; // Which nav groups are collapsed
+  filesPreviewPanelWidth: number;
+  filesPreviewPanelHeight: number;
+  filesPreviewDockMode: PreviewDockMode;
+  filesPreviewImageMode: PreviewImageMode;
   locale?: string;
 };
 
@@ -34,6 +41,10 @@ export function loadSettings(): UiSettings {
     splitRatio: 0.6,
     navCollapsed: false,
     navGroupsCollapsed: {},
+    filesPreviewPanelWidth: 820,
+    filesPreviewPanelHeight: 620,
+    filesPreviewDockMode: "corner",
+    filesPreviewImageMode: "fit",
   };
 
   try {
@@ -79,6 +90,26 @@ export function loadSettings(): UiSettings {
         typeof parsed.navGroupsCollapsed === "object" && parsed.navGroupsCollapsed !== null
           ? parsed.navGroupsCollapsed
           : defaults.navGroupsCollapsed,
+      filesPreviewPanelWidth:
+        typeof parsed.filesPreviewPanelWidth === "number" &&
+        parsed.filesPreviewPanelWidth >= 420 &&
+        parsed.filesPreviewPanelWidth <= 1400
+          ? parsed.filesPreviewPanelWidth
+          : defaults.filesPreviewPanelWidth,
+      filesPreviewPanelHeight:
+        typeof parsed.filesPreviewPanelHeight === "number" &&
+        parsed.filesPreviewPanelHeight >= 320 &&
+        parsed.filesPreviewPanelHeight <= 1000
+          ? parsed.filesPreviewPanelHeight
+          : defaults.filesPreviewPanelHeight,
+      filesPreviewDockMode:
+        parsed.filesPreviewDockMode === "center" || parsed.filesPreviewDockMode === "corner"
+          ? parsed.filesPreviewDockMode
+          : defaults.filesPreviewDockMode,
+      filesPreviewImageMode:
+        parsed.filesPreviewImageMode === "actual" || parsed.filesPreviewImageMode === "fit"
+          ? parsed.filesPreviewImageMode
+          : defaults.filesPreviewImageMode,
       locale: isSupportedLocale(parsed.locale) ? parsed.locale : undefined,
     };
   } catch {

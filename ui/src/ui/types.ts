@@ -495,6 +495,23 @@ export type WorkspaceFilesDownloadResult = {
   contentBase64: string;
 };
 
+export type WorkspaceFilesPreviewResult = {
+  ok: true;
+  path: string;
+  fileName: string;
+  size: number;
+  mimeType: string;
+  kind: "text" | "markdown" | "image" | "unsupported" | "too_large";
+  text?: string;
+  contentBase64?: string;
+};
+
+export type WorkspaceFilesDeleteResult = {
+  ok: true;
+  path: string;
+  deletedPath: string;
+};
+
 export type WorkspaceFilesStateResult = {
   ok: true;
   agentId: string;

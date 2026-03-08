@@ -64,7 +64,37 @@ const BOOTSTRAP_FILE_NAMES_POST_ONBOARDING = BOOTSTRAP_FILE_NAMES.filter(
 const MEMORY_FILE_NAMES = [DEFAULT_MEMORY_FILENAME, DEFAULT_MEMORY_ALT_FILENAME] as const;
 const WORKSPACE_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
 const WORKSPACE_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024;
+const WORKSPACE_PREVIEW_TEXT_MAX_BYTES = 300 * 1024;
+const WORKSPACE_PREVIEW_IMAGE_MAX_BYTES = 15 * 1024 * 1024;
 const WORKSPACE_FILES_UI_STATE_RELATIVE_PATH = path.join(".openclaw", "files-ui.json");
+const WORKSPACE_PREVIEW_TEXT_EXTENSIONS = new Set([
+  ".txt",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".json",
+  ".css",
+  ".html",
+  ".py",
+  ".sh",
+  ".yaml",
+  ".yml",
+  ".rs",
+  ".go",
+  ".java",
+  ".md",
+]);
+const WORKSPACE_PREVIEW_IMAGE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".svg",
+]);
 
 const ALLOWED_FILE_NAMES = new Set<string>([...BOOTSTRAP_FILE_NAMES, ...MEMORY_FILE_NAMES]);
 
@@ -178,6 +208,51 @@ async function writeWorkspaceFilesUiState(
     data: payload,
     encoding: "utf8",
   });
+}
+
+function resolveWorkspacePreviewMimeType(filePath: string): string {
+  switch (path.extname(filePath).toLowerCase()) {
+    case ".md":
+      return "text/markdown; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".html":
+      return "text/html; charset=utf-8";
+    case ".yaml":
+    case ".yml":
+      return "application/yaml; charset=utf-8";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".gif":
+      return "image/gif";
+    case ".webp":
+      return "image/webp";
+    case ".svg":
+      return "image/svg+xml";
+    default:
+      return "text/plain; charset=utf-8";
+  }
+}
+
+function classifyWorkspacePreviewKind(
+  filePath: string,
+): "text" | "markdown" | "image" | "unsupported" {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".md") {
+    return "markdown";
+  }
+  if (WORKSPACE_PREVIEW_IMAGE_EXTENSIONS.has(ext)) {
+    return "image";
+  }
+  if (WORKSPACE_PREVIEW_TEXT_EXTENSIONS.has(ext)) {
+    return "text";
+  }
+  return "unsupported";
 }
 
 type FileMeta = {
@@ -993,6 +1068,138 @@ export const agentsHandlers: GatewayRequestHandlers = {
         fileName: path.basename(filePath),
         size: fileBuffer.length,
         contentBase64: fileBuffer.toString("base64"),
+      },
+      undefined,
+    );
+  },
+  "workspace.files.preview": async ({ params, respond }) => {
+    const body = params && typeof params === "object" ? params : {};
+    const filePathRaw = typeof body.path === "string" ? body.path.trim() : "";
+    if (!filePathRaw) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "path is required"));
+      return;
+    }
+
+    const filePath = path.resolve(filePathRaw);
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
+    try {
+      stat = await fs.stat(filePath);
+    } catch {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "file not found"));
+      return;
+    }
+    if (!stat.isFile()) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "path is not a file"));
+      return;
+    }
+
+    const kind = classifyWorkspacePreviewKind(filePath);
+    const mimeType = resolveWorkspacePreviewMimeType(filePath);
+    if (kind === "unsupported") {
+      respond(
+        true,
+        {
+          ok: true,
+          path: filePath,
+          fileName: path.basename(filePath),
+          size: stat.size,
+          mimeType,
+          kind,
+        },
+        undefined,
+      );
+      return;
+    }
+
+    const maxBytes =
+      kind === "image" ? WORKSPACE_PREVIEW_IMAGE_MAX_BYTES : WORKSPACE_PREVIEW_TEXT_MAX_BYTES;
+    if (stat.size > maxBytes) {
+      respond(
+        true,
+        {
+          ok: true,
+          path: filePath,
+          fileName: path.basename(filePath),
+          size: stat.size,
+          mimeType,
+          kind: "too_large",
+        },
+        undefined,
+      );
+      return;
+    }
+
+    try {
+      if (kind === "image") {
+        const buffer = await fs.readFile(filePath);
+        respond(
+          true,
+          {
+            ok: true,
+            path: filePath,
+            fileName: path.basename(filePath),
+            size: buffer.length,
+            mimeType,
+            kind,
+            contentBase64: buffer.toString("base64"),
+          },
+          undefined,
+        );
+        return;
+      }
+
+      const text = await fs.readFile(filePath, "utf8");
+      respond(
+        true,
+        {
+          ok: true,
+          path: filePath,
+          fileName: path.basename(filePath),
+          size: stat.size,
+          mimeType,
+          kind,
+          text,
+        },
+        undefined,
+      );
+    } catch {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "failed to read file"));
+    }
+  },
+  "workspace.files.delete": async ({ params, respond }) => {
+    const body = params && typeof params === "object" ? params : {};
+    const filePathRaw = typeof body.path === "string" ? body.path.trim() : "";
+    if (!filePathRaw) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "path is required"));
+      return;
+    }
+
+    const filePath = path.resolve(filePathRaw);
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
+    try {
+      stat = await fs.stat(filePath);
+    } catch {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "file not found"));
+      return;
+    }
+    if (!stat.isFile()) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "path is not a file"));
+      return;
+    }
+
+    try {
+      await movePathToTrash(filePath);
+    } catch {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "failed to delete file"));
+      return;
+    }
+
+    respond(
+      true,
+      {
+        ok: true,
+        path: filePath,
+        deletedPath: filePath,
       },
       undefined,
     );

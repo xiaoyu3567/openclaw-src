@@ -714,3 +714,92 @@ describe("agents.files.get/set symlink safety", () => {
     expect(mocks.fsOpen).not.toHaveBeenCalled();
   });
 });
+
+describe("workspace.files.preview", () => {
+  it("returns text preview content for plain text files", async () => {
+    mocks.fsStat.mockResolvedValue(makeFileStat({ size: 12 }));
+    mocks.fsReadFile.mockResolvedValue("hello world\n");
+
+    const { respond, promise } = makeCall("workspace.files.preview", {
+      agentId: "main",
+      path: "/tmp/hello.txt",
+    });
+    await promise;
+
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        ok: true,
+        path: path.resolve("/tmp/hello.txt"),
+        fileName: "hello.txt",
+        kind: "text",
+        text: "hello world\n",
+      }),
+      undefined,
+    );
+  });
+
+  it("returns image preview content for image files", async () => {
+    const buffer = Buffer.from("png-data");
+    mocks.fsStat.mockResolvedValue(makeFileStat({ size: buffer.length }));
+    mocks.fsReadFile.mockResolvedValue(buffer as never);
+
+    const { respond, promise } = makeCall("workspace.files.preview", {
+      agentId: "main",
+      path: "/tmp/cat.png",
+    });
+    await promise;
+
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        ok: true,
+        path: path.resolve("/tmp/cat.png"),
+        fileName: "cat.png",
+        kind: "image",
+        contentBase64: buffer.toString("base64"),
+      }),
+      undefined,
+    );
+  });
+});
+
+describe("workspace.files.delete", () => {
+  it("moves a file to trash", async () => {
+    mocks.fsStat.mockResolvedValue(makeFileStat({ size: 8 }));
+
+    const { respond, promise } = makeCall("workspace.files.delete", {
+      agentId: "main",
+      path: "/tmp/delete-me.txt",
+    });
+    await promise;
+
+    expect(mocks.movePathToTrash).toHaveBeenCalledWith(path.resolve("/tmp/delete-me.txt"));
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        ok: true,
+        deletedPath: path.resolve("/tmp/delete-me.txt"),
+      }),
+      undefined,
+    );
+  });
+
+  it("rejects deleting directories", async () => {
+    mocks.fsStat.mockResolvedValue({
+      isFile: () => false,
+    } as unknown as import("node:fs").Stats);
+
+    const { respond, promise } = makeCall("workspace.files.delete", {
+      agentId: "main",
+      path: "/tmp/folder",
+    });
+    await promise;
+
+    expect(respond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({ message: expect.stringContaining("not a file") }),
+    );
+  });
+});
